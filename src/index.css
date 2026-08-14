@@ -1,0 +1,142 @@
+@import "tailwindcss";
+
+@config "../tailwind.config.js";
+
+:root {
+  --glass-border: rgba(255, 255, 255, 0.12);
+  --glass-bg: rgba(18, 19, 31, 0.7);
+  --glass-bg-hover: rgba(26, 28, 43, 0.85);
+}
+
+body {
+  background-color: #07070b;
+  color: #f1f5f9;
+  font-family: 'Outfit', sans-serif;
+  min-height: 100vh;
+  overflow-x: hidden;
+}
+
+/* Custom Glassmorphism */
+.glass-panel {
+  background: var(--glass-bg);
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
+  border: 1px solid var(--glass-border);
+  box-shadow: 0 8px 32px 0 rgba(0, 0, 0, 0.37);
+}
+
+.glass-card {
+  background: rgba(255, 255, 255, 0.04);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+.glass-card-gold {
+  background: linear-gradient(135deg, rgba(247, 208, 101, 0.08) 0%, rgba(18, 19, 31, 0.9) 100%);
+  backdrop-filter: blur(16px);
+  border: 1px solid rgba(243, 183, 44, 0.3);
+  box-shadow: 0 8px 32px -4px rgba(243, 183, 44, 0.15);
+}
+
+.glass-card-neon {
+  background: linear-gradient(135deg, rgba(255, 46, 147, 0.08) 0%, rgba(13, 14, 21, 0.9) 100%);
+  backdrop-filter: blur(16px);
+  border: 1px solid rgba(255, 46, 147, 0.3);
+  box-shadow: 0 8px 32px -4px rgba(255, 46, 147, 0.2);
+}
+
+/* Text Shimmer and Gold Gradients */
+.gold-text-gradient {
+  background: linear-gradient(135deg, #fff2c6 0%, #f7d065 40%, #d99718 80%, #fae39a 100%);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+}
+
+.celebration-text-gradient {
+  background: linear-gradient(135deg, #ff6b35 0%, #ff2e93 35%, #9d4edd 70%, #00f5d4 100%);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+}
+
+.neon-text-gradient {
+  background: linear-gradient(135deg, #00f5d4 0%, #ff2e93 50%, #fee440 100%);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+}
+
+/* 3D Card Perspective */
+.card-perspective {
+  perspective: 1200px;
+}
+
+.card-3d-inner {
+  transform-style: preserve-3d;
+  transition: transform 0.2s ease-out;
+}
+
+/* Atmospheric Glowing Orbs */
+.glow-orb {
+  position: absolute;
+  border-radius: 50%;
+  filter: blur(90px);
+  pointer-events: none;
+  z-index: 0;
+}
+
+/* Custom Scrollbar */
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+
+::-webkit-scrollbar-track {
+  background: #0d0e15;
+}
+
+::-webkit-scrollbar-thumb {
+  background: #26293f;
+  border-radius: 4px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: #4b5175;
+}
+
+/* Pulse animation on touch/tap */
+.tap-effect:active {
+  transform: scale(0.96);
+  transition: transform 0.1s ease-in-out;
+}
+
+/* Floating Balloons Animation */
+@keyframes balloonFloat {
+  0% {
+    transform: translateY(110vh) translateX(0px) rotate(0deg);
+    opacity: 0;
+  }
+  15% {
+    opacity: 0.75;
+  }
+  85% {
+    opacity: 0.75;
+  }
+  100% {
+    transform: translateY(-20vh) translateX(25px) rotate(15deg);
+    opacity: 0;
+  }
+}
+
+.floating-balloon {
+  position: absolute;
+  animation: balloonFloat linear infinite;
+  pointer-events: none;
+  z-index: 0;
+}
+
+/* Safe areas on mobile devices */
+@supports (padding-bottom: env(safe-area-inset-bottom)) {
+  .safe-area-bottom {
+    padding-bottom: env(safe-area-inset-bottom);
+  }
+}

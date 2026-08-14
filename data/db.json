@@ -1,0 +1,119 @@
+{
+  "birthdays": {
+    "arun-kumar-demo": {
+      "id": "demo-bday-1",
+      "publicToken": "arun-kumar-demo",
+      "adminPin": "1234",
+      "name": "Arun Kumar",
+      "phone": "+919876543210",
+      "phoneMasked": "+91 98*** ***10",
+      "email": "arun.birthday@example.com",
+      "photoUrl": "https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=500&auto=format&fit=crop&q=80",
+      "birthdayDate": "2026-08-16",
+      "themePreference": "gold",
+      "createdAt": "2026-08-14T03:22:24.176Z",
+      "stats": {
+        "totalWishes": 3,
+        "whatsappShares": 2,
+        "smsShares": 1,
+        "emailShares": 0,
+        "imagesReceived": 2,
+        "videosReceived": 0
+      }
+    },
+    "manojkumar-gvstc": {
+      "id": "4273w2Em80",
+      "publicToken": "manojkumar-gvstc",
+      "adminPin": "5267",
+      "name": "MANOJKUMAR",
+      "phone": "+919944478049",
+      "phoneMasked": "+91 99*** ***49",
+      "email": "manoj1408m@gmail.com",
+      "birthdayDate": "2026-08-14",
+      "themePreference": "gold",
+      "createdAt": "2026-08-14T03:25:24.639Z",
+      "stats": {
+        "totalWishes": 2,
+        "whatsappShares": 4,
+        "smsShares": 0,
+        "emailShares": 0,
+        "imagesReceived": 0,
+        "videosReceived": 0
+      }
+    },
+    "sneha-patel-zstje": {
+      "id": "XQI8Dip4AR",
+      "publicToken": "sneha-patel-zstje",
+      "adminPin": "9988",
+      "name": "Sneha Patel",
+      "phone": "+919876543210",
+      "phoneMasked": "+91 98*** ***10",
+      "email": "sneha@example.com",
+      "birthdayDate": "2026-08-20",
+      "themePreference": "pastel",
+      "createdAt": "2026-08-14T03:29:03.501Z",
+      "stats": {
+        "totalWishes": 0,
+        "whatsappShares": 2,
+        "smsShares": 0,
+        "emailShares": 0,
+        "imagesReceived": 0,
+        "videosReceived": 0
+      }
+    }
+  },
+  "wishes": {
+    "arun-kumar-demo": [
+      {
+        "id": "wish-1",
+        "birthdayToken": "arun-kumar-demo",
+        "senderName": "Kamal",
+        "message": "Happy birthday Arun! Wishing you immense joy, great health, and tremendous success this year! Let’s celebrate soon! 🎂🎉",
+        "imageUrl": "https://images.unsplash.com/photo-1513151233558-d860c5398176?w=600&auto=format&fit=crop&q=80",
+        "theme": "gold",
+        "deliveryMethod": "whatsapp",
+        "createdAt": "2026-08-13T23:22:24.176Z"
+      },
+      {
+        "id": "wish-2",
+        "birthdayToken": "arun-kumar-demo",
+        "senderName": "Priya & Rahul",
+        "message": "May all your dreams turn into reality this year. Have a blast and keep smiling always! ✨❤️",
+        "theme": "festive",
+        "deliveryMethod": "sms",
+        "createdAt": "2026-08-14T01:22:24.176Z"
+      },
+      {
+        "id": "wish-3",
+        "birthdayToken": "arun-kumar-demo",
+        "senderName": "Ananya",
+        "message": "Happy Birthday brother! Cheers to more late night talks and awesome adventures together! 🥳🥂",
+        "imageUrl": "https://images.unsplash.com/photo-1530103862676-de8c9debad1d?w=600&auto=format&fit=crop&q=80",
+        "theme": "neon",
+        "deliveryMethod": "whatsapp",
+        "createdAt": "2026-08-14T02:22:24.176Z"
+      }
+    ],
+    "manojkumar-gvstc": [
+      {
+        "id": "CrNbuJJKGB",
+        "birthdayToken": "manojkumar-gvstc",
+        "senderName": "KAMAL",
+        "message": "Happy Birthday MANOJKUMAR! May your day be as wonderful and radiant as you are. Wishing you great health, infinite happiness, and unforgettable moments ahead! ✨❤️",
+        "theme": "gold",
+        "deliveryMethod": "whatsapp",
+        "createdAt": "2026-08-14T03:28:08.800Z"
+      },
+      {
+        "id": "nNfeXvUzO5",
+        "birthdayToken": "manojkumar-gvstc",
+        "senderName": "Kamalnath . B",
+        "message": "Cheers to another fabulous year around the sun, MANOJKUMAR! So grateful to know you. Here's to making epic new memories together! 🥂🎊",
+        "theme": "gold",
+        "deliveryMethod": "whatsapp",
+        "createdAt": "2026-08-14T03:26:29.751Z"
+      }
+    ],
+    "sneha-patel-zstje": []
+  }
+}
