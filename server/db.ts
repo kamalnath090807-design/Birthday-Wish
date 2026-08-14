@@ -1,6 +1,7 @@
 import fs from 'fs';
 import path from 'path';
 import { fileURLToPath } from 'url';
+import { MongoClient, Db } from 'mongodb';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -49,33 +50,64 @@ interface DatabaseSchema {
 const DATA_DIR = path.resolve(__dirname, '../data');
 const DB_FILE = path.join(DATA_DIR, 'db.json');
 
+// Cached MongoDB connection for Serverless environments
+let cachedMongoClient: MongoClient | null = null;
+let cachedMongoDb: Db | null = null;
+
+async function getMongoDatabase(): Promise<Db | null> {
+  const uri = process.env.MONGODB_URI;
+  if (!uri) return null;
+
+  try {
+    if (cachedMongoDb && cachedMongoClient) {
+      return cachedMongoDb;
+    }
+    const client = new MongoClient(uri);
+    await client.connect();
+    const dbName = process.env.MONGODB_DB_NAME || 'birthday_wish';
+    cachedMongoClient = client;
+    cachedMongoDb = client.db(dbName);
+    console.log('🍃 Connected successfully to MongoDB Atlas');
+    return cachedMongoDb;
+  } catch (err) {
+    console.error('Failed to connect to MongoDB Atlas:', err);
+    return null;
+  }
+}
+
 class DatabaseStore {
   private data: DatabaseSchema = {
     birthdays: {},
     wishes: {},
   };
+  private isFileStorageAvailable = false;
 
   constructor() {
     this.init();
   }
 
   private init() {
-    if (!fs.existsSync(DATA_DIR)) {
-      fs.mkdirSync(DATA_DIR, { recursive: true });
-    }
+    // Seed default demo birthday
+    this.seedDefault();
 
-    if (fs.existsSync(DB_FILE)) {
-      try {
-        const raw = fs.readFileSync(DB_FILE, 'utf-8');
-        this.data = JSON.parse(raw);
-      } catch (err) {
-        console.error('Error loading database file, initializing empty store:', err);
-        this.save();
+    try {
+      if (!fs.existsSync(DATA_DIR)) {
+        fs.mkdirSync(DATA_DIR, { recursive: true });
       }
-    } else {
-      // Seed with a wonderful default demo birthday if empty
-      this.seedDefault();
-      this.save();
+
+      if (fs.existsSync(DB_FILE)) {
+        const raw = fs.readFileSync(DB_FILE, 'utf-8');
+        const parsed = JSON.parse(raw);
+        if (parsed.birthdays && parsed.wishes) {
+          this.data = parsed;
+        }
+      } else {
+        this.saveToFile();
+      }
+      this.isFileStorageAvailable = true;
+    } catch (err) {
+      // In serverless / read-only environments (Vercel), fs write is restricted
+      this.isFileStorageAvailable = false;
     }
   }
 
@@ -139,38 +171,63 @@ class DatabaseStore {
     this.data.wishes[demoToken] = demoWishes;
   }
 
-  private save() {
+  private saveToFile() {
+    if (!this.isFileStorageAvailable) return;
     try {
       fs.writeFileSync(DB_FILE, JSON.stringify(this.data, null, 2), 'utf-8');
     } catch (err) {
-      console.error('Failed to persist database:', err);
+      // Ignore if read-only
     }
   }
 
-  public getBirthdayByToken(token: string): BirthdayEvent | undefined {
+  public async getBirthdayByToken(token: string): Promise<BirthdayEvent | undefined> {
+    const mongo = await getMongoDatabase();
+    if (mongo) {
+      const doc = await mongo.collection<BirthdayEvent>('birthdays').findOne({ publicToken: token });
+      if (doc) return doc;
+    }
     return this.data.birthdays[token];
   }
 
-  public getBirthdayById(id: string): BirthdayEvent | undefined {
+  public async getBirthdayById(id: string): Promise<BirthdayEvent | undefined> {
+    const mongo = await getMongoDatabase();
+    if (mongo) {
+      const doc = await mongo.collection<BirthdayEvent>('birthdays').findOne({ id });
+      if (doc) return doc;
+    }
     return Object.values(this.data.birthdays).find(b => b.id === id);
   }
 
-  public getAllBirthdays(): BirthdayEvent[] {
+  public async getAllBirthdays(): Promise<BirthdayEvent[]> {
+    const mongo = await getMongoDatabase();
+    if (mongo) {
+      const list = await mongo.collection<BirthdayEvent>('birthdays').find({}).sort({ createdAt: -1 }).toArray();
+      if (list && list.length > 0) return list;
+    }
     return Object.values(this.data.birthdays).sort(
       (a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
     );
   }
 
-  public createBirthday(event: BirthdayEvent): BirthdayEvent {
+  public async createBirthday(event: BirthdayEvent): Promise<BirthdayEvent> {
     this.data.birthdays[event.publicToken] = event;
     if (!this.data.wishes[event.publicToken]) {
       this.data.wishes[event.publicToken] = [];
     }
-    this.save();
+    this.saveToFile();
+
+    const mongo = await getMongoDatabase();
+    if (mongo) {
+      await mongo.collection('birthdays').updateOne(
+        { publicToken: event.publicToken },
+        { $set: event },
+        { upsert: true }
+      );
+    }
     return event;
   }
 
-  public addWish(token: string, wish: Wish): Wish {
+  public async addWish(token: string, wish: Wish): Promise<Wish> {
     if (!this.data.wishes[token]) {
       this.data.wishes[token] = [];
     }
@@ -186,25 +243,57 @@ class DatabaseStore {
       if (wish.deliveryMethod === 'email') bday.stats.emailShares += 1;
     }
 
-    this.save();
+    this.saveToFile();
+
+    const mongo = await getMongoDatabase();
+    if (mongo) {
+      await mongo.collection('wishes').insertOne(wish);
+      const incUpdate: Record<string, number> = { 'stats.totalWishes': 1 };
+      if (wish.imageUrl) incUpdate['stats.imagesReceived'] = 1;
+      if (wish.videoUrl) incUpdate['stats.videosReceived'] = 1;
+      if (wish.deliveryMethod === 'whatsapp') incUpdate['stats.whatsappShares'] = 1;
+      if (wish.deliveryMethod === 'sms') incUpdate['stats.smsShares'] = 1;
+      if (wish.deliveryMethod === 'email') incUpdate['stats.emailShares'] = 1;
+
+      await mongo.collection('birthdays').updateOne(
+        { publicToken: token },
+        { $inc: incUpdate }
+      );
+    }
+
     return wish;
   }
 
-  public getWishesByToken(token: string): Wish[] {
+  public async getWishesByToken(token: string): Promise<Wish[]> {
+    const mongo = await getMongoDatabase();
+    if (mongo) {
+      const list = await mongo.collection<Wish>('wishes').find({ birthdayToken: token }).sort({ createdAt: -1 }).toArray();
+      if (list && list.length > 0) return list;
+    }
     return this.data.wishes[token] || [];
   }
 
-  public trackShare(token: string, method: 'whatsapp' | 'sms' | 'email') {
+  public async trackShare(token: string, method: 'whatsapp' | 'sms' | 'email'): Promise<void> {
     const bday = this.data.birthdays[token];
     if (bday) {
       if (method === 'whatsapp') bday.stats.whatsappShares += 1;
       if (method === 'sms') bday.stats.smsShares += 1;
       if (method === 'email') bday.stats.emailShares += 1;
-      this.save();
+      this.saveToFile();
+    }
+
+    const mongo = await getMongoDatabase();
+    if (mongo) {
+      const field = method === 'whatsapp' ? 'stats.whatsappShares' : method === 'sms' ? 'stats.smsShares' : 'stats.emailShares';
+      await mongo.collection('birthdays').updateOne(
+        { publicToken: token },
+        { $inc: { [field]: 1 } }
+      );
     }
   }
 
-  public deleteWish(token: string, wishId: string): boolean {
+  public async deleteWish(token: string, wishId: string): Promise<boolean> {
+    let deleted = false;
     if (this.data.wishes[token]) {
       const idx = this.data.wishes[token].findIndex(w => w.id === wishId);
       if (idx !== -1) {
@@ -213,11 +302,24 @@ class DatabaseStore {
         if (bday && bday.stats.totalWishes > 0) {
           bday.stats.totalWishes -= 1;
         }
-        this.save();
-        return true;
+        this.saveToFile();
+        deleted = true;
       }
     }
-    return false;
+
+    const mongo = await getMongoDatabase();
+    if (mongo) {
+      const res = await mongo.collection('wishes').deleteOne({ id: wishId, birthdayToken: token });
+      if (res.deletedCount > 0) {
+        await mongo.collection('birthdays').updateOne(
+          { publicToken: token, 'stats.totalWishes': { $gt: 0 } },
+          { $inc: { 'stats.totalWishes': -1 } }
+        );
+        deleted = true;
+      }
+    }
+
+    return deleted;
   }
 }
 

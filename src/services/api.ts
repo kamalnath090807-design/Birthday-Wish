@@ -1,6 +1,6 @@
 import { BirthdayEvent, Wish } from '../types';
 
-const API_BASE = '/api';
+const API_BASE = (import.meta.env.VITE_API_BASE_URL || '/api').replace(/\/$/, '');
 
 export const api = {
   // 1. Upload media (photo or video)

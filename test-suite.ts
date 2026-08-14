@@ -1,7 +1,9 @@
+import { app } from './server/app.js';
 import { validateAndNormalizeIndianPhone } from './server/utils/phone.js';
+import http from 'http';
 
 async function runTests() {
-  console.log('🧪 Starting Full Test Suite...\n');
+  console.log('🧪 Starting Full Test Suite (Serverless & API Verification)...\n');
   let passed = 0;
   let failed = 0;
 
@@ -41,9 +43,12 @@ async function runTests() {
   const invalid3 = validateAndNormalizeIndianPhone('');
   assert(!invalid3.isValid, 'Empty string');
 
-  // 2. Integration API Tests
-  console.log('\n--- 2. Backend API Integration Tests ---');
-  const BASE_URL = 'http://localhost:5000/api';
+  // 2. Integration API Tests with Test Server
+  console.log('\n--- 2. Backend API Serverless & Route Tests ---');
+  const server = http.createServer(app);
+  await new Promise<void>((resolve) => server.listen(0, resolve));
+  const address = server.address() as any;
+  const BASE_URL = `http://localhost:${address.port}/api`;
 
   try {
     // Health check
@@ -109,6 +114,18 @@ async function runTests() {
     assert(updatedAdmin.stats.totalWishes >= 1, 'Total Wishes incremented');
     assert(updatedAdmin.stats.whatsappShares >= 1, 'WhatsApp Shares tracked');
 
+    // Test Media Upload (Memory / Base64 Data URL)
+    const testBlob = new Blob(['fake image content'], { type: 'image/jpeg' });
+    const formData = new FormData();
+    formData.append('file', testBlob, 'test-photo.jpg');
+
+    const uploadRes = await fetch(`${BASE_URL}/upload`, {
+      method: 'POST',
+      body: formData,
+    });
+    const uploadData = await uploadRes.json();
+    assert(uploadData.url && uploadData.type === 'image', 'Serverless Media Upload endpoint');
+
     // Moderation: Delete Wish
     const delRes = await fetch(`${BASE_URL}/birthdays/${token}/wishes/${wish.id}`, {
       method: 'DELETE',
@@ -119,6 +136,8 @@ async function runTests() {
   } catch (err: any) {
     console.error('API Test Error:', err);
     assert(false, `API Tests execution: ${err.message}`);
+  } finally {
+    server.close();
   }
 
   console.log(`\n========================================`);
