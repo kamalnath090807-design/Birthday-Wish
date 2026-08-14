@@ -16,12 +16,12 @@ const __dirname = path.dirname(__filename);
 
 export const app = express();
 
-// Enable CORS and JSON parsing
+// Enable CORS and JSON body parsing
 app.use(cors());
 app.use(express.json({ limit: '50mb' }));
 app.use(express.urlencoded({ extended: true, limit: '50mb' }));
 
-// Ensure upload directory exists for local disk fallback if accessible
+// 1. Static uploads directory support (local fallback)
 const UPLOADS_DIR = path.resolve(__dirname, '../uploads');
 try {
   if (!fs.existsSync(UPLOADS_DIR)) {
@@ -29,10 +29,16 @@ try {
   }
   app.use('/uploads', express.static(UPLOADS_DIR));
 } catch (e) {
-  // Ignored in read-only serverless environments
+  // Ignore in restricted environments
 }
 
-// Multer in-memory storage for serverless production compatibility
+// 2. Static frontend serving for production (serves built Vite dist/ folder)
+const DIST_DIR = path.resolve(__dirname, '../dist');
+if (fs.existsSync(DIST_DIR)) {
+  app.use(express.static(DIST_DIR));
+}
+
+// Multer memory storage (works reliably on Render without disk loss)
 const storage = multer.memoryStorage();
 const upload = multer({
   storage,
@@ -52,7 +58,7 @@ const upload = multer({
   },
 });
 
-// Helper to create URL-friendly slug from name
+// Helper to create URL slug from name
 function createSlug(name: string): string {
   const base = name
     .toLowerCase()
@@ -66,13 +72,15 @@ function createSlug(name: string): string {
 
 const router = express.Router();
 
-// 1. Health Check Endpoint
+// --- API ROUTES ---
+
+// 1. Health check endpoint (Render health check & verification)
 router.get('/health', (_req, res) => {
   res.setHeader('Content-Type', 'application/json');
   return res.status(200).json({ status: 'ok' });
 });
 
-// 2. Upload Media Endpoint (Serverless Base64 / Cloudinary / Local Disk)
+// 2. Upload Media Endpoint (Memory Base64 Data URL or Cloudinary or Local Disk)
 router.post('/upload', upload.single('file'), async (req, res) => {
   try {
     if (!req.file) {
@@ -111,16 +119,16 @@ router.post('/upload', upload.single('file'), async (req, res) => {
         fileUrl = `data:${req.file.mimetype};base64,${req.file.buffer.toString('base64')}`;
       }
     } else {
-      // Direct Base64 data URL for instant zero-dependency serverless operation
+      // Direct Base64 data URL for zero-config production reliability on Render
       const base64String = req.file.buffer.toString('base64');
       fileUrl = `data:${req.file.mimetype};base64,${base64String}`;
 
-      // If running in local dev with disk write support, also save to uploads folder
+      // Also save to disk locally if writable
       try {
         const diskPath = path.join(UPLOADS_DIR, safeName);
         fs.writeFileSync(diskPath, req.file.buffer);
       } catch (e) {
-        // In serverless, memory base64 is already set
+        // Ignored in non-writable environments
       }
     }
 
@@ -351,6 +359,17 @@ router.delete('/birthdays/:token/wishes/:wishId', async (req, res) => {
   }
 });
 
-// Mount router on both '/api' and '/' for complete Vercel serverless routing compatibility
+// Mount router on '/api'
 app.use('/api', router);
-app.use('/', router);
+
+// SPA Fallback: Any non-API request serves the React index.html
+app.use((req, res, next) => {
+  if (req.path.startsWith('/api')) {
+    return next();
+  }
+  const indexPath = path.join(DIST_DIR, 'index.html');
+  if (fs.existsSync(indexPath)) {
+    return res.sendFile(indexPath);
+  }
+  next();
+});
