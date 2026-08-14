@@ -5,8 +5,11 @@ import path from 'path';
 import fs from 'fs';
 import { fileURLToPath } from 'url';
 import { nanoid } from 'nanoid';
+import dotenv from 'dotenv';
 import { db, BirthdayEvent, Wish } from './db.js';
 import { validateAndNormalizeIndianPhone } from './utils/phone.js';
+
+dotenv.config();
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -18,19 +21,18 @@ app.use(cors());
 app.use(express.json({ limit: '50mb' }));
 app.use(express.urlencoded({ extended: true, limit: '50mb' }));
 
-// Ensure upload directory exists for local disk fallback
+// Ensure upload directory exists for local disk fallback if accessible
 const UPLOADS_DIR = path.resolve(__dirname, '../uploads');
 try {
   if (!fs.existsSync(UPLOADS_DIR)) {
     fs.mkdirSync(UPLOADS_DIR, { recursive: true });
   }
-  // Serve uploaded media statically if local disk exists
   app.use('/uploads', express.static(UPLOADS_DIR));
 } catch (e) {
-  // In serverless / read-only environments, ignore
+  // Ignored in read-only serverless environments
 }
 
-// Multer in-memory storage for serverless compatibility
+// Multer in-memory storage for serverless production compatibility
 const storage = multer.memoryStorage();
 const upload = multer({
   storage,
@@ -50,7 +52,7 @@ const upload = multer({
   },
 });
 
-// Helper to create slug from name
+// Helper to create URL-friendly slug from name
 function createSlug(name: string): string {
   const base = name
     .toLowerCase()
@@ -62,10 +64,16 @@ function createSlug(name: string): string {
   return `${base || 'birthday'}-${rand}`;
 }
 
-// --- ROUTES ---
+const router = express.Router();
 
-// 1. Upload Media Endpoint (Memory -> Base64 or Cloudinary or Local Disk)
-app.post('/api/upload', upload.single('file'), async (req, res) => {
+// 1. Health Check Endpoint
+router.get('/health', (_req, res) => {
+  res.setHeader('Content-Type', 'application/json');
+  return res.status(200).json({ status: 'ok' });
+});
+
+// 2. Upload Media Endpoint (Serverless Base64 / Cloudinary / Local Disk)
+router.post('/upload', upload.single('file'), async (req, res) => {
   try {
     if (!req.file) {
       return res.status(400).json({ error: 'No file uploaded' });
@@ -77,7 +85,6 @@ app.post('/api/upload', upload.single('file'), async (req, res) => {
 
     let fileUrl: string;
 
-    // Optional Cloudinary Upload if credentials exist
     const cloudName = process.env.CLOUDINARY_CLOUD_NAME;
     const apiKey = process.env.CLOUDINARY_API_KEY;
     const apiSecret = process.env.CLOUDINARY_API_SECRET;
@@ -98,22 +105,22 @@ app.post('/api/upload', upload.single('file'), async (req, res) => {
           const cloudData = await cloudRes.json();
           fileUrl = cloudData.secure_url;
         } else {
-          // Fallback to Base64 data URL
           fileUrl = `data:${req.file.mimetype};base64,${req.file.buffer.toString('base64')}`;
         }
       } catch (err) {
-        console.warn('Cloudinary upload fallback to base64:', err);
         fileUrl = `data:${req.file.mimetype};base64,${req.file.buffer.toString('base64')}`;
       }
     } else {
-      // If local filesystem writable, also save to disk for /uploads serving
+      // Direct Base64 data URL for instant zero-dependency serverless operation
+      const base64String = req.file.buffer.toString('base64');
+      fileUrl = `data:${req.file.mimetype};base64,${base64String}`;
+
+      // If running in local dev with disk write support, also save to uploads folder
       try {
         const diskPath = path.join(UPLOADS_DIR, safeName);
         fs.writeFileSync(diskPath, req.file.buffer);
-        fileUrl = `/uploads/${safeName}`;
       } catch (e) {
-        // Fallback to Data URL for serverless Vercel
-        fileUrl = `data:${req.file.mimetype};base64,${req.file.buffer.toString('base64')}`;
+        // In serverless, memory base64 is already set
       }
     }
 
@@ -130,15 +137,15 @@ app.post('/api/upload', upload.single('file'), async (req, res) => {
   }
 });
 
-// 2. Validate Indian Phone Endpoint
-app.post('/api/validate-phone', (req, res) => {
+// 3. Validate Indian Phone Endpoint
+router.post('/validate-phone', (req, res) => {
   const { phone } = req.body;
   const result = validateAndNormalizeIndianPhone(phone);
   return res.json(result);
 });
 
-// 3. Create Birthday Event
-app.post('/api/birthdays', async (req, res) => {
+// 4. Create Birthday Event
+router.post('/birthdays', async (req, res) => {
   try {
     const { name, phone, email, photoUrl, birthdayDate, themePreference, adminPin } = req.body;
 
@@ -193,68 +200,80 @@ app.post('/api/birthdays', async (req, res) => {
   }
 });
 
-// 4. List All Birthdays (for admin directory / switcher)
-app.get('/api/birthdays', async (_req, res) => {
-  const list = await db.getAllBirthdays();
-  const sanitized = list.map(b => ({
-    id: b.id,
-    publicToken: b.publicToken,
-    name: b.name,
-    photoUrl: b.photoUrl,
-    birthdayDate: b.birthdayDate,
-    createdAt: b.createdAt,
-    stats: b.stats,
-  }));
-  return res.json(sanitized);
+// 5. List All Birthdays (for admin directory / switcher)
+router.get('/birthdays', async (_req, res) => {
+  try {
+    const list = await db.getAllBirthdays();
+    const sanitized = list.map(b => ({
+      id: b.id,
+      publicToken: b.publicToken,
+      name: b.name,
+      photoUrl: b.photoUrl,
+      birthdayDate: b.birthdayDate,
+      createdAt: b.createdAt,
+      stats: b.stats,
+    }));
+    return res.json(sanitized);
+  } catch (err: any) {
+    return res.status(500).json({ error: err.message || 'Failed to fetch birthdays' });
+  }
 });
 
-// 5. Get Public Birthday Details
-app.get('/api/birthdays/:token', async (req, res) => {
-  const { token } = req.params;
-  const birthday = await db.getBirthdayByToken(token);
+// 6. Get Public Birthday Details
+router.get('/birthdays/:token', async (req, res) => {
+  try {
+    const { token } = req.params;
+    const birthday = await db.getBirthdayByToken(token);
 
-  if (!birthday) {
-    return res.status(404).json({ error: 'Birthday event not found' });
+    if (!birthday) {
+      return res.status(404).json({ error: 'Birthday event not found' });
+    }
+
+    return res.json({
+      publicToken: birthday.publicToken,
+      name: birthday.name,
+      phone: birthday.phone,
+      phoneMasked: birthday.phoneMasked,
+      email: birthday.email,
+      photoUrl: birthday.photoUrl,
+      birthdayDate: birthday.birthdayDate,
+      themePreference: birthday.themePreference,
+      createdAt: birthday.createdAt,
+      totalWishes: birthday.stats?.totalWishes || 0,
+    });
+  } catch (err: any) {
+    return res.status(500).json({ error: err.message || 'Failed to fetch birthday details' });
   }
-
-  return res.json({
-    publicToken: birthday.publicToken,
-    name: birthday.name,
-    phone: birthday.phone,
-    phoneMasked: birthday.phoneMasked,
-    email: birthday.email,
-    photoUrl: birthday.photoUrl,
-    birthdayDate: birthday.birthdayDate,
-    themePreference: birthday.themePreference,
-    createdAt: birthday.createdAt,
-    totalWishes: birthday.stats?.totalWishes || 0,
-  });
 });
 
-// 6. Get Admin Birthday Details (Full stats + wishes + PIN verification)
-app.get('/api/birthdays/:token/admin', async (req, res) => {
-  const { token } = req.params;
-  const pin = req.query.pin as string;
-  const birthday = await db.getBirthdayByToken(token);
+// 7. Get Admin Birthday Details (Full stats + wishes + PIN verification)
+router.get('/birthdays/:token/admin', async (req, res) => {
+  try {
+    const { token } = req.params;
+    const pin = req.query.pin as string;
+    const birthday = await db.getBirthdayByToken(token);
 
-  if (!birthday) {
-    return res.status(404).json({ error: 'Birthday event not found' });
+    if (!birthday) {
+      return res.status(404).json({ error: 'Birthday event not found' });
+    }
+
+    if (pin && birthday.adminPin !== pin) {
+      return res.status(401).json({ error: 'Invalid admin PIN' });
+    }
+
+    const wishes = await db.getWishesByToken(token);
+
+    return res.json({
+      ...birthday,
+      wishes,
+    });
+  } catch (err: any) {
+    return res.status(500).json({ error: err.message || 'Failed to fetch admin details' });
   }
-
-  if (pin && birthday.adminPin !== pin) {
-    return res.status(401).json({ error: 'Invalid admin PIN' });
-  }
-
-  const wishes = await db.getWishesByToken(token);
-
-  return res.json({
-    ...birthday,
-    wishes,
-  });
 });
 
-// 7. Submit Birthday Wish
-app.post('/api/birthdays/:token/wishes', async (req, res) => {
+// 8. Submit Birthday Wish
+router.post('/birthdays/:token/wishes', async (req, res) => {
   try {
     const { token } = req.params;
     const birthday = await db.getBirthdayByToken(token);
@@ -291,36 +310,47 @@ app.post('/api/birthdays/:token/wishes', async (req, res) => {
   }
 });
 
-// 8. Get Wishes For Birthday
-app.get('/api/birthdays/:token/wishes', async (req, res) => {
-  const { token } = req.params;
-  const wishes = await db.getWishesByToken(token);
-  return res.json(wishes);
-});
-
-// 9. Track Delivery Share Trigger
-app.post('/api/birthdays/:token/track-share', async (req, res) => {
-  const { token } = req.params;
-  const { method } = req.body;
-
-  if (['whatsapp', 'sms', 'email'].includes(method)) {
-    await db.trackShare(token, method);
+// 9. Get Wishes For Birthday
+router.get('/birthdays/:token/wishes', async (req, res) => {
+  try {
+    const { token } = req.params;
+    const wishes = await db.getWishesByToken(token);
+    return res.json(wishes);
+  } catch (err: any) {
+    return res.status(500).json({ error: err.message || 'Failed to fetch wishes' });
   }
-
-  return res.json({ success: true });
 });
 
-// 10. Delete a wish (Moderation)
-app.delete('/api/birthdays/:token/wishes/:wishId', async (req, res) => {
-  const { token, wishId } = req.params;
-  const success = await db.deleteWish(token, wishId);
-  if (success) {
-    return res.json({ success: true, message: 'Wish removed' });
+// 10. Track Delivery Share Trigger
+router.post('/birthdays/:token/track-share', async (req, res) => {
+  try {
+    const { token } = req.params;
+    const { method } = req.body;
+
+    if (['whatsapp', 'sms', 'email'].includes(method)) {
+      await db.trackShare(token, method);
+    }
+
+    return res.json({ success: true });
+  } catch (err: any) {
+    return res.json({ success: false });
   }
-  return res.status(404).json({ error: 'Wish not found' });
 });
 
-// Health check
-app.get('/api/health', (_req, res) => {
-  res.json({ status: 'ok', timestamp: new Date().toISOString(), env: process.env.NODE_ENV || 'development' });
+// 11. Delete a wish (Moderation)
+router.delete('/birthdays/:token/wishes/:wishId', async (req, res) => {
+  try {
+    const { token, wishId } = req.params;
+    const success = await db.deleteWish(token, wishId);
+    if (success) {
+      return res.json({ success: true, message: 'Wish removed' });
+    }
+    return res.status(404).json({ error: 'Wish not found' });
+  } catch (err: any) {
+    return res.status(500).json({ error: err.message || 'Failed to delete wish' });
+  }
 });
+
+// Mount router on both '/api' and '/' for complete Vercel serverless routing compatibility
+app.use('/api', router);
+app.use('/', router);

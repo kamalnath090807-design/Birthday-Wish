@@ -49,12 +49,27 @@ async function runTests() {
   await new Promise<void>((resolve) => server.listen(0, resolve));
   const address = server.address() as any;
   const BASE_URL = `http://localhost:${address.port}/api`;
+  const ROOT_URL = `http://localhost:${address.port}`;
 
   try {
-    // Health check
+    // Health check at /api/health
     const healthRes = await fetch(`${BASE_URL}/health`);
     const health = await healthRes.json();
-    assert(health.status === 'ok', 'Server Health Check');
+    assert(health.status === 'ok', 'Server Health Check (/api/health)');
+
+    // Health check at /health
+    const rootHealthRes = await fetch(`${ROOT_URL}/health`);
+    const rootHealth = await rootHealthRes.json();
+    assert(rootHealth.status === 'ok', 'Root Health Check (/health)');
+
+    // Phone Validation Endpoint
+    const phoneRes = await fetch(`${BASE_URL}/validate-phone`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ phone: '9876543210' }),
+    });
+    const phoneData = await phoneRes.json();
+    assert(phoneData.isValid && phoneData.normalized === '+919876543210', 'Phone validation API (/validate-phone)');
 
     // Create Birthday
     const createRes = await fetch(`${BASE_URL}/birthdays`, {
@@ -70,7 +85,7 @@ async function runTests() {
       }),
     });
     const created = await createRes.json();
-    assert(created.publicToken && created.name === 'Sneha Patel', 'Create Birthday Event API');
+    assert(created.publicToken && created.name === 'Sneha Patel', 'Create Birthday Event API (/birthdays)');
     assert(created.phone === '+919876543210', 'Phone normalized in storage');
 
     const token = created.publicToken;

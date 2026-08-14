@@ -80,6 +80,26 @@
         "imagesReceived": 0,
         "videosReceived": 0
       }
+    },
+    "sneha-patel-xrpgv": {
+      "id": "Jv3xxOaS04",
+      "publicToken": "sneha-patel-xrpgv",
+      "adminPin": "9988",
+      "name": "Sneha Patel",
+      "phone": "+919876543210",
+      "phoneMasked": "+91 98*** ***10",
+      "email": "sneha@example.com",
+      "birthdayDate": "2026-08-20",
+      "themePreference": "pastel",
+      "createdAt": "2026-08-14T04:48:09.964Z",
+      "stats": {
+        "totalWishes": 0,
+        "whatsappShares": 2,
+        "smsShares": 0,
+        "emailShares": 0,
+        "imagesReceived": 0,
+        "videosReceived": 0
+      }
     }
   },
   "wishes": {
@@ -135,6 +155,7 @@
       }
     ],
     "sneha-patel-zstje": [],
-    "sneha-patel-9tdxw": []
+    "sneha-patel-9tdxw": [],
+    "sneha-patel-xrpgv": []
   }
 }
