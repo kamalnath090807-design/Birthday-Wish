@@ -2,7 +2,7 @@
 
 <div align="center">
 
-![Birthday Wish Platform](https://images.unsplash.com/photo-1513151233558-d860c5398176?w=1200&auto=format&fit=crop&q=80)
+![Birthday Wish Platform](https://images.unsplash.com/photo-1558636508-e0db3814bd1d?w=1600&auto=format&fit=crop&q=85)
 
 **A luxury, mobile-first birthday wish platform designed for personalized celebration hubs, interactive 3D digital greeting cards, and multi-channel sharing via WhatsApp, SMS, and Email.**
 
