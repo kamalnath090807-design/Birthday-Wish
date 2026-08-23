@@ -81,44 +81,91 @@ export const CARD_THEMES: Record<CardThemeId, CardTheme> = {
   },
 };
 
-export const QUICK_PROMPTS: QuickPrompt[] = [
+export const TODAY_QUICK_PROMPTS: QuickPrompt[] = [
   {
     id: 'heartfelt',
     label: 'Heartfelt & Warm',
     emoji: '❤️',
-    template: (recipient, sender) =>
+    template: (recipient) =>
       `Happy Birthday ${recipient}! May your day be as wonderful and radiant as you are. Wishing you great health, infinite happiness, and unforgettable moments ahead! ✨❤️`,
   },
   {
     id: 'funny',
     label: 'Playful & Fun',
     emoji: '🥳',
-    template: (recipient, sender) =>
+    template: (recipient) =>
       `Happy Birthday ${recipient}! Another year older, wiser, and definitely more legendary! Let’s party hard and eat way too much cake today! 🎂🎉🍻`,
   },
   {
     id: 'inspiring',
     label: 'Big Dreams & Success',
     emoji: '🚀',
-    template: (recipient, sender) =>
+    template: (recipient) =>
       `Happy Birthday ${recipient}! May this coming year bring you closer to all your biggest dreams and grand ambitions. Keep shining bright! ⭐🏆`,
   },
   {
     id: 'short',
     label: 'Short & Sweet',
     emoji: '✨',
-    template: (recipient, sender) =>
+    template: (recipient) =>
       `Wishing you the happiest of birthdays, ${recipient}! Have a truly magical and blessed year ahead! 🎂🎈`,
   },
   {
-    id: 'colleague',
+    id: 'friend',
     label: 'Friend & Buddy',
     emoji: '🤝',
-    template: (recipient, sender) =>
-      `Cheers to another fabulous year around the sun, ${recipient}! So grateful to know you. Here's to making epic new memories together! 🥂🎊`,
+    template: (recipient) =>
+      `Cheers to another fabulous year around the sun, ${recipient}! So grateful to have you in my life. Here's to making epic new memories together! 🥂🎊`,
   },
 ];
 
-export function generateDefaultWish(recipientName: string, senderName: string): string {
+export const BELATED_QUICK_PROMPTS: QuickPrompt[] = [
+  {
+    id: 'belated_warm',
+    label: 'Belated & Warm',
+    emoji: '💝',
+    template: (recipient) =>
+      `Belated Happy Birthday ${recipient}! Even though this wish is a day late, my warmest prayers, love, and best wishes for you are always on time! May this year bring you boundless joy and success! 🎂✨`,
+  },
+  {
+    id: 'belated_fun',
+    label: 'Playful Belated',
+    emoji: '🥳',
+    template: (recipient) =>
+      `Belated Happy Birthday ${recipient}! I'm just extending your birthday celebration for another day! Hope you had a blast yesterday and keep the party going all year long! 🎉🥂🍰`,
+  },
+  {
+    id: 'belated_sweet',
+    label: 'Sweet & Blessed',
+    emoji: '🌸',
+    template: (recipient) =>
+      `Wishing you a very Happy Belated Birthday, ${recipient}! Hoping your special day yesterday was filled with love and laughter. May God bless you with health and prosperity! 💖✨`,
+  },
+  {
+    id: 'belated_legendary',
+    label: 'Better Late Than Never',
+    emoji: '🚀',
+    template: (recipient) =>
+      `Belated Happy Birthday ${recipient}! Better late than never for someone as awesome as you! Wishing you an incredible, super successful year ahead! 🏆🌟`,
+  },
+  {
+    id: 'belated_short',
+    label: 'Short & Sincere',
+    emoji: '🎈',
+    template: (recipient) =>
+      `Belated Happy Birthday ${recipient}! Sending you loads of love and wishing you a wonderful year ahead filled with happiness! 🎁❤️`,
+  },
+];
+
+export const QUICK_PROMPTS = TODAY_QUICK_PROMPTS;
+
+export function getQuickPrompts(isBelated: boolean): QuickPrompt[] {
+  return isBelated ? BELATED_QUICK_PROMPTS : TODAY_QUICK_PROMPTS;
+}
+
+export function generateDefaultWish(recipientName: string, _senderName?: string, isBelated: boolean = false): string {
+  if (isBelated) {
+    return `Wishing you a very Belated Happy Birthday, ${recipientName}! 🎂🎁\n\nEven though this wish arrives a little late, my heartfelt wishes for your happiness, good health, and success are always with you. Hope you had a fabulous celebration! ❤️✨`;
+  }
   return `Wishing you a very Happy Birthday, ${recipientName}! 🎂🎉\n\nMay your day be filled with immense joy, laughter, good health and unforgettable memories. Have an amazing year ahead! ❤️`;
 }

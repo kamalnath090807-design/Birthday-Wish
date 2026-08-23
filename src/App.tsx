@@ -7,6 +7,7 @@ import { HomePage } from './pages/HomePage';
 import { CreateBirthday } from './components/admin/CreateBirthday';
 import { AdminPage } from './pages/AdminPage';
 import { BirthdayPage } from './pages/BirthdayPage';
+import { RecipientWishPage } from './pages/RecipientWishPage';
 
 export const App: React.FC = () => {
   return (
@@ -26,6 +27,7 @@ export const App: React.FC = () => {
             <Route path="/admin" component={AdminPage} />
             <Route path="/admin/:token" component={AdminPage} />
             <Route path="/birthday/:token" component={BirthdayPage} />
+            <Route path="/wish/:wishId" component={RecipientWishPage} />
             <Route>
               <div className="text-center py-24 space-y-4">
                 <div className="text-5xl">🎂</div>

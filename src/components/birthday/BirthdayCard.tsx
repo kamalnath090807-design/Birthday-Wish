@@ -1,6 +1,7 @@
 import React, { forwardRef, useState } from 'react';
 import { CardThemeId } from '../../types';
 import { CARD_THEMES, generateDefaultWish } from '../../utils/cardThemes';
+import { getBirthdayStatus } from '../../utils/dateUtils';
 import { Sparkles, Heart } from 'lucide-react';
 
 interface BirthdayCardProps {
@@ -10,6 +11,7 @@ interface BirthdayCardProps {
   imageUrl?: string | null;
   theme: CardThemeId;
   date?: string;
+  isBelated?: boolean;
   interactive?: boolean;
 }
 
@@ -22,15 +24,22 @@ export const BirthdayCard = forwardRef<HTMLDivElement, BirthdayCardProps>(
       imageUrl,
       theme = 'gold',
       date,
+      isBelated: explicitIsBelated,
       interactive = true,
     },
     ref
   ) => {
     const themeConfig = CARD_THEMES[theme] || CARD_THEMES.gold;
+    const status = getBirthdayStatus(date);
+    const isBelated = explicitIsBelated !== undefined ? explicitIsBelated : status.isBelated;
+    const bannerTitle = explicitIsBelated !== undefined
+      ? (explicitIsBelated ? 'Belated Happy Birthday' : 'Happy Birthday')
+      : status.greetingTitle;
+
     const effectiveMessage =
       message && message.trim().length > 0
         ? message.trim()
-        : generateDefaultWish(recipientName, senderName || 'A Friend');
+        : generateDefaultWish(recipientName, senderName || 'A Friend', isBelated);
 
     const [tilt, setTilt] = useState<{ x: number; y: number }>({ x: 0, y: 0 });
 
@@ -87,9 +96,9 @@ export const BirthdayCard = forwardRef<HTMLDivElement, BirthdayCardProps>(
           {/* Card Content */}
           <div className="relative z-10 flex flex-col items-center text-center space-y-4">
             {/* Header Sparkle Banner */}
-            <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-white/10 backdrop-blur-md text-[11px] font-bold tracking-[0.2em] uppercase">
+            <div className="inline-flex items-center gap-1.5 px-3.5 py-1 rounded-full bg-white/10 backdrop-blur-md text-[11px] font-bold tracking-[0.2em] uppercase">
               <Sparkles className="w-3 h-3 text-gold-400" />
-              <span>Happy Birthday</span>
+              <span>{bannerTitle}</span>
               <Sparkles className="w-3 h-3 text-gold-400" />
             </div>
 

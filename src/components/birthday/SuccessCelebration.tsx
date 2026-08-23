@@ -1,7 +1,6 @@
 import React, { useEffect } from 'react';
 import { motion } from 'framer-motion';
-import { Sparkles, Heart, PlusCircle, RotateCcw, Download } from 'lucide-react';
-import { Link } from 'wouter';
+import { Sparkles, RotateCcw, Download, PlusCircle } from 'lucide-react';
 import { BirthdayEvent, CardThemeId } from '../../types';
 import { triggerCelebrationConfetti } from '../common/ConfettiCanvas';
 import { BirthdayCard } from './BirthdayCard';
@@ -13,7 +12,9 @@ interface SuccessCelebrationProps {
   message: string;
   imageUrl: string | null;
   theme: CardThemeId;
-  onReset: () => void;
+  isBelated?: boolean;
+  onWishAgain: () => void;
+  onEditWish: () => void;
   onDownloadCard: () => void;
 }
 
@@ -23,7 +24,9 @@ export const SuccessCelebration: React.FC<SuccessCelebrationProps> = ({
   message,
   imageUrl,
   theme,
-  onReset,
+  isBelated,
+  onWishAgain,
+  onEditWish,
   onDownloadCard,
 }) => {
   useEffect(() => {
@@ -40,7 +43,7 @@ export const SuccessCelebration: React.FC<SuccessCelebrationProps> = ({
       {/* Sparkle Header Badge */}
       <div className="inline-flex items-center gap-2 px-4 py-1.5 rounded-full bg-emerald-950/60 border border-emerald-500/40 text-emerald-300 text-xs sm:text-sm font-semibold shadow-xl shadow-emerald-500/10 animate-bounce">
         <Sparkles className="w-4 h-4 text-gold-400" />
-        <span>🎉 Wish Prepared & Sent! 🎉</span>
+        <span>{isBelated ? '🎉 Belated Wish Prepared & Sent! 🎉' : '🎉 Wish Prepared & Sent! 🎉'}</span>
       </div>
 
       <div className="space-y-2">
@@ -60,53 +63,49 @@ export const SuccessCelebration: React.FC<SuccessCelebrationProps> = ({
           message={message}
           imageUrl={imageUrl}
           theme={theme}
+          isBelated={isBelated}
+          date={birthday.birthdayDate}
           interactive={false}
         />
       </div>
 
-      {/* Actions */}
-      <div className="flex flex-col sm:flex-row items-center justify-center gap-3 pt-2">
+      {/* Action Buttons: Save HD Image, Wish Again, Edit This Wish */}
+      <div className="flex flex-wrap items-center justify-center gap-3 pt-2">
+        {/* 1. Save HD Card Image */}
         <button
           onClick={() => {
             sound.playPop();
             onDownloadCard();
           }}
-          className="w-full sm:w-auto inline-flex items-center justify-center gap-2 px-6 py-3 rounded-full font-bold text-sm bg-gradient-to-r from-gold-500 to-amber-600 text-dark-950 shadow-lg shadow-gold-500/20 hover:scale-105 active:scale-95 transition"
+          className="inline-flex items-center justify-center gap-2 px-5 py-3 rounded-full font-bold text-xs sm:text-sm bg-gradient-to-r from-gold-500 to-amber-600 text-dark-950 shadow-lg shadow-gold-500/20 hover:scale-105 active:scale-95 transition cursor-pointer"
         >
           <Download className="w-4 h-4" />
           <span>Save HD Card Image</span>
         </button>
 
+        {/* 2. Wish Again (Brand new wish) */}
         <button
           onClick={() => {
             sound.playPop();
-            onReset();
+            onWishAgain();
           }}
-          className="w-full sm:w-auto inline-flex items-center justify-center gap-2 px-5 py-3 rounded-full font-semibold text-sm bg-white/10 hover:bg-white/15 text-white border border-white/15 hover:scale-105 active:scale-95 transition"
+          className="inline-flex items-center justify-center gap-2 px-5 py-3 rounded-full font-bold text-xs sm:text-sm bg-gradient-to-r from-celebration-pink via-celebration-purple to-gold-500 text-white shadow-lg shadow-celebration-pink/25 hover:shadow-celebration-pink/40 hover:scale-105 active:scale-95 transition cursor-pointer"
+        >
+          <PlusCircle className="w-4 h-4 text-gold-200" />
+          <span>Wish Again</span>
+        </button>
+
+        {/* 3. Edit & Re-send Current Wish */}
+        <button
+          onClick={() => {
+            sound.playPop();
+            onEditWish();
+          }}
+          className="inline-flex items-center justify-center gap-2 px-5 py-3 rounded-full font-semibold text-xs sm:text-sm bg-white/10 hover:bg-white/15 text-white border border-white/15 hover:scale-105 active:scale-95 transition cursor-pointer"
         >
           <RotateCcw className="w-4 h-4 text-celebration-pink" />
-          <span>Send Another Wish</span>
+          <span>Edit & Re-send</span>
         </button>
-      </div>
-
-      {/* Create your own page banner */}
-      <div className="mt-8 p-5 rounded-3xl bg-gradient-to-br from-purple-950/40 via-dark-900 to-pink-950/40 border border-purple-500/30 text-left flex flex-col sm:flex-row items-center justify-between gap-4 shadow-xl">
-        <div className="space-y-1 text-center sm:text-left">
-          <div className="text-sm font-bold text-white flex items-center justify-center sm:justify-start gap-1.5">
-            <span>🎂 Have an upcoming birthday yourself?</span>
-          </div>
-          <p className="text-xs text-slate-400">
-            Create your personalized birthday wish page in seconds and share with your friends & family!
-          </p>
-        </div>
-        <Link
-          href="/create"
-          onClick={() => sound.playPop()}
-          className="shrink-0 inline-flex items-center gap-2 px-4 py-2 rounded-full text-xs font-bold text-white bg-gradient-to-r from-celebration-pink to-celebration-purple shadow-md hover:scale-105 transition"
-        >
-          <PlusCircle className="w-3.5 h-3.5" />
-          <span>Create Free Page</span>
-        </Link>
       </div>
     </motion.div>
   );

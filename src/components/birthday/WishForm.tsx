@@ -1,8 +1,9 @@
-import React, { useState, useRef } from 'react';
+import React, { useState, useRef, useMemo } from 'react';
 import { motion } from 'framer-motion';
 import { Sparkles, Send, Wand2, Heart, User, MessageSquare } from 'lucide-react';
 import { BirthdayEvent, CardThemeId } from '../../types';
-import { QUICK_PROMPTS } from '../../utils/cardThemes';
+import { getQuickPrompts } from '../../utils/cardThemes';
+import { getBirthdayStatus } from '../../utils/dateUtils';
 import { MediaUploader } from './MediaUploader';
 import { CardThemePicker } from './CardThemePicker';
 import { BirthdayCard } from './BirthdayCard';
@@ -11,6 +12,7 @@ import { SuccessCelebration } from './SuccessCelebration';
 import { useToast } from '../common/Toast';
 import { sound } from '../../utils/audio';
 import { exportCardAsImage } from '../../utils/cardRenderer';
+import { api } from '../../services/api';
 
 interface WishFormProps {
   birthday: BirthdayEvent;
@@ -32,8 +34,12 @@ export const WishForm: React.FC<WishFormProps> = ({ birthday }) => {
 
   const cardRef = useRef<HTMLDivElement>(null);
 
+  // Dynamic Birthday Status (Today vs Belated vs Upcoming)
+  const status = useMemo(() => getBirthdayStatus(birthday.birthdayDate), [birthday.birthdayDate]);
+  const activePrompts = useMemo(() => getQuickPrompts(status.isBelated), [status.isBelated]);
+
   const handleQuickPrompt = (promptId: string) => {
-    const prompt = QUICK_PROMPTS.find((p) => p.id === promptId);
+    const prompt = activePrompts.find((p) => p.id === promptId);
     if (prompt) {
       sound.playSparkle();
       const generated = prompt.template(
@@ -45,22 +51,48 @@ export const WishForm: React.FC<WishFormProps> = ({ birthday }) => {
     }
   };
 
-  const handleOpenDelivery = (e: React.FormEvent) => {
+  const [currentWishId, setCurrentWishId] = useState<string | null>(null);
+  const [isPreparing, setIsPreparing] = useState(false);
+
+  const handleOpenDelivery = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!senderName || senderName.trim().length === 0) {
       showToast('Please enter your name so they know who sent it! ❤️', 'error', 'Name Required');
       return;
     }
-    sound.playPop();
-    setIsDeliveryOpen(true);
+
+    try {
+      setIsPreparing(true);
+      const savedWish = await api.submitWish(birthday.publicToken, {
+        senderName: senderName.trim(),
+        message: message.trim() || undefined,
+        imageUrl: imageUrl || undefined,
+        videoUrl: videoUrl || undefined,
+        theme,
+      });
+
+      setCurrentWishId(savedWish.id);
+      sound.playSparkle();
+      setIsDeliveryOpen(true);
+    } catch (err: any) {
+      showToast(err.message || 'Failed to prepare wish card', 'error');
+    } finally {
+      setIsPreparing(false);
+    }
   };
 
-  const handleResetForm = () => {
+  const handleWishAgain = () => {
     setSenderName('');
     setMessage('');
     setImageUrl(null);
     setVideoUrl(null);
     setTheme((birthday.themePreference as CardThemeId) || 'gold');
+    setCurrentWishId(null);
+    setIsCompleted(false);
+    setIsDeliveryOpen(false);
+  };
+
+  const handleEditWish = () => {
     setIsCompleted(false);
     setIsDeliveryOpen(false);
   };
@@ -87,7 +119,9 @@ export const WishForm: React.FC<WishFormProps> = ({ birthday }) => {
         message={message}
         imageUrl={imageUrl}
         theme={theme}
-        onReset={handleResetForm}
+        isBelated={status.isBelated}
+        onWishAgain={handleWishAgain}
+        onEditWish={handleEditWish}
         onDownloadCard={handleDownloadDirectCard}
       />
     );
@@ -97,7 +131,7 @@ export const WishForm: React.FC<WishFormProps> = ({ birthday }) => {
     <div id="wish-form-section" className="max-w-4xl mx-auto px-4 pb-20">
       <div className="text-center mb-8">
         <h2 className="text-2xl sm:text-3xl font-extrabold text-white flex items-center justify-center gap-2">
-          <span>Make Your Wish For</span>
+          <span>{status.isBelated ? 'Make Your Belated Wish For' : 'Make Your Wish For'}</span>
           <span className="celebration-text-gradient">{birthday.name}</span>
         </h2>
         <p className="text-xs sm:text-sm text-slate-400 mt-1">
@@ -138,7 +172,7 @@ export const WishForm: React.FC<WishFormProps> = ({ birthday }) => {
               <div className="flex items-center justify-between">
                 <label className="text-xs font-semibold text-slate-200 uppercase tracking-wider flex items-center gap-1.5">
                   <MessageSquare className="w-3.5 h-3.5 text-celebration-cyan" />
-                  <span>Birthday Message (Optional)</span>
+                  <span>{status.isBelated ? 'Belated Birthday Message (Optional)' : 'Birthday Message (Optional)'}</span>
                 </label>
                 <span
                   className={`text-[11px] font-medium ${
@@ -153,7 +187,11 @@ export const WishForm: React.FC<WishFormProps> = ({ birthday }) => {
                 maxLength={500}
                 value={message}
                 onChange={(e) => setMessage(e.target.value)}
-                placeholder="Write something special from your heart... ❤️ (or leave empty for a warm personalized greeting)"
+                placeholder={
+                  status.isBelated
+                    ? 'Write a sweet belated wish from your heart... ❤️ (or pick an inspiration below!)'
+                    : 'Write something special from your heart... ❤️ (or leave empty for a warm personalized greeting)'
+                }
                 className="w-full px-4 py-3 rounded-2xl bg-dark-950/80 border border-white/10 text-white placeholder-slate-500 text-sm focus:outline-none focus:ring-2 focus:ring-celebration-cyan/50 focus:border-celebration-cyan transition resize-none leading-relaxed"
               />
             </div>
@@ -162,10 +200,12 @@ export const WishForm: React.FC<WishFormProps> = ({ birthday }) => {
             <div className="space-y-2">
               <div className="flex items-center gap-1.5 text-xs font-semibold text-gold-400">
                 <Wand2 className="w-3.5 h-3.5" />
-                <span>Magic Message Inspirations:</span>
+                <span>
+                  {status.isBelated ? '✨ Magic Belated Inspirations:' : '✨ Magic Message Inspirations:'}
+                </span>
               </div>
               <div className="flex flex-wrap gap-1.5">
-                {QUICK_PROMPTS.map((p) => (
+                {activePrompts.map((p) => (
                   <button
                     key={p.id}
                     type="button"
@@ -201,30 +241,36 @@ export const WishForm: React.FC<WishFormProps> = ({ birthday }) => {
             <div className="pt-4">
               <button
                 type="submit"
-                className="w-full group flex items-center justify-center gap-2.5 py-4 px-6 rounded-2xl font-black text-base text-white bg-gradient-to-r from-celebration-pink via-celebration-purple to-gold-500 shadow-xl shadow-celebration-pink/30 hover:shadow-celebration-pink/50 hover:scale-[1.01] active:scale-[0.98] transition-all cursor-pointer"
+                disabled={isPreparing}
+                className="w-full group flex items-center justify-center gap-2.5 py-4 px-6 rounded-2xl font-black text-base text-white bg-gradient-to-r from-celebration-pink via-celebration-purple to-gold-500 shadow-xl shadow-celebration-pink/30 hover:shadow-celebration-pink/50 hover:scale-[1.01] active:scale-[0.98] transition-all cursor-pointer disabled:opacity-70"
               >
                 <Sparkles className="w-5 h-5 text-gold-200 group-hover:rotate-12 transition-transform" />
-                <span>Preview & Send Birthday Wish</span>
+                <span>
+                  {isPreparing
+                    ? 'Preparing 3D Card... ✨'
+                    : status.isBelated
+                    ? 'Preview & Send Belated Wish'
+                    : 'Preview & Send Birthday Wish'}
+                </span>
                 <Send className="w-4 h-4 ml-1" />
               </button>
             </div>
           </form>
         </div>
 
-        {/* Right Column: Live Interactive Card Preview */}
-        <div className="lg:col-span-6 lg:sticky lg:top-24 space-y-4">
+        {/* Right Column: Live Interactive 3D Card Preview */}
+        <div className="lg:col-span-6 sticky top-24 space-y-4">
           <div className="flex items-center justify-between px-2">
-            <span className="text-xs font-bold uppercase tracking-wider text-slate-400 flex items-center gap-1.5">
-              <Sparkles className="w-3.5 h-3.5 text-gold-400" />
+            <div className="flex items-center gap-1.5 text-xs font-bold uppercase tracking-wider text-gold-400">
+              <Sparkles className="w-3.5 h-3.5" />
               <span>Live Card Preview</span>
-            </span>
-            <span className="text-[11px] text-slate-500">
+            </div>
+            <div className="text-[11px] text-slate-400">
               Interactive 3D on hover/touch
-            </span>
+            </div>
           </div>
 
-          {/* Live Card Container */}
-          <div className="p-4 rounded-3xl bg-dark-900/60 border border-white/10 backdrop-blur-md shadow-2xl flex items-center justify-center">
+          <div className="perspective-1000">
             <BirthdayCard
               ref={cardRef}
               recipientName={birthday.name}
@@ -233,6 +279,7 @@ export const WishForm: React.FC<WishFormProps> = ({ birthday }) => {
               imageUrl={imageUrl}
               theme={theme}
               date={birthday.birthdayDate}
+              isBelated={status.isBelated}
               interactive={true}
             />
           </div>
@@ -248,11 +295,13 @@ export const WishForm: React.FC<WishFormProps> = ({ birthday }) => {
         isOpen={isDeliveryOpen}
         onClose={() => setIsDeliveryOpen(false)}
         birthday={birthday}
+        wishId={currentWishId}
         senderName={senderName}
         message={message}
         imageUrl={imageUrl}
         videoUrl={videoUrl}
         theme={theme}
+        isBelated={status.isBelated}
         cardElementRef={cardRef}
         onWishCompleted={() => {
           setIsDeliveryOpen(false);

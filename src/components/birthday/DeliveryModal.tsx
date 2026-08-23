@@ -11,7 +11,7 @@ import {
   Sparkles,
   ExternalLink,
   Loader2,
-  Share2
+  Share2,
 } from 'lucide-react';
 import { BirthdayEvent, CardThemeId } from '../../types';
 import {
@@ -20,7 +20,7 @@ import {
   buildEmailUrl,
   copyToClipboard,
   buildFormattedMessage,
-  shareViaWebShareApi
+  shareViaWebShareApi,
 } from '../../utils/share';
 import { exportCardAsImage } from '../../utils/cardRenderer';
 import { useToast } from '../common/Toast';
@@ -31,11 +31,13 @@ interface DeliveryModalProps {
   isOpen: boolean;
   onClose: () => void;
   birthday: BirthdayEvent;
+  wishId?: string | null;
   senderName: string;
   message: string;
   imageUrl: string | null;
   videoUrl: string | null;
   theme: CardThemeId;
+  isBelated?: boolean;
   cardElementRef: React.RefObject<HTMLDivElement | null>;
   onWishCompleted: () => void;
 }
@@ -44,23 +46,27 @@ export const DeliveryModal: React.FC<DeliveryModalProps> = ({
   isOpen,
   onClose,
   birthday,
+  wishId,
   senderName,
   message,
   imageUrl,
   videoUrl,
   theme,
+  isBelated,
   cardElementRef,
   onWishCompleted,
 }) => {
   const { showToast } = useToast();
   const [isExporting, setIsExporting] = useState(false);
   const [copied, setCopied] = useState(false);
-  const [isSubmitting, setIsSubmitting] = useState(false);
 
   if (!isOpen) return null;
 
   const origin = window.location.origin;
-  const cardShareUrl = `${origin}/birthday/${birthday.publicToken}`;
+  // Point directly to the 3D card experience for the recipient
+  const cardShareUrl = wishId
+    ? `${origin}/wish/${wishId}`
+    : `${origin}/birthday/${birthday.publicToken}`;
 
   const payload = {
     recipientName: birthday.name,
@@ -69,47 +75,31 @@ export const DeliveryModal: React.FC<DeliveryModalProps> = ({
     senderName,
     message,
     cardUrl: cardShareUrl,
-  };
-
-  const persistWishAndProceed = async (deliveryMethod: 'whatsapp' | 'sms' | 'email' | 'download' | 'copied') => {
-    try {
-      setIsSubmitting(true);
-      await api.submitWish(birthday.publicToken, {
-        senderName,
-        message,
-        imageUrl: imageUrl || undefined,
-        videoUrl: videoUrl || undefined,
-        theme,
-        deliveryMethod,
-      });
-      await api.trackShare(birthday.publicToken, deliveryMethod === 'copied' || deliveryMethod === 'download' ? 'whatsapp' : deliveryMethod);
-    } catch (e) {
-      console.warn('Persistence notice:', e);
-    } finally {
-      setIsSubmitting(false);
-      onWishCompleted();
-    }
+    isBelated,
   };
 
   const handleWhatsApp = async () => {
     sound.playPop();
     const url = buildWhatsAppUrl(payload);
     window.open(url, '_blank');
-    await persistWishAndProceed('whatsapp');
+    await api.trackShare(birthday.publicToken, 'whatsapp');
+    onWishCompleted();
   };
 
   const handleSms = async () => {
     sound.playPop();
     const url = buildSmsUrl(payload);
     window.location.href = url;
-    await persistWishAndProceed('sms');
+    await api.trackShare(birthday.publicToken, 'sms');
+    onWishCompleted();
   };
 
   const handleEmail = async () => {
     sound.playPop();
     const url = buildEmailUrl(payload);
     window.location.href = url;
-    await persistWishAndProceed('email');
+    await api.trackShare(birthday.publicToken, 'email');
+    onWishCompleted();
   };
 
   const handleDownloadCard = async () => {
@@ -123,7 +113,7 @@ export const DeliveryModal: React.FC<DeliveryModalProps> = ({
         pixelRatio: 3,
       });
       showToast('Card downloaded successfully! 🎁', 'success', 'Saved to Photos/Downloads');
-      await persistWishAndProceed('download');
+      onWishCompleted();
     } catch (err: any) {
       showToast('Failed to save image. You can take a screenshot or copy text.', 'error');
     } finally {
@@ -139,7 +129,7 @@ export const DeliveryModal: React.FC<DeliveryModalProps> = ({
       setCopied(true);
       showToast('Personalized birthday wish copied to clipboard! 📋', 'success');
       setTimeout(() => setCopied(false), 3000);
-      await persistWishAndProceed('copied');
+      onWishCompleted();
     } else {
       showToast('Could not access clipboard. Please copy manually.', 'error');
     }
@@ -149,7 +139,8 @@ export const DeliveryModal: React.FC<DeliveryModalProps> = ({
     sound.playPop();
     const shared = await shareViaWebShareApi(payload);
     if (shared) {
-      await persistWishAndProceed('whatsapp');
+      await api.trackShare(birthday.publicToken, 'whatsapp');
+      onWishCompleted();
     } else {
       handleCopyMessage();
     }
@@ -168,7 +159,7 @@ export const DeliveryModal: React.FC<DeliveryModalProps> = ({
           {/* Close button */}
           <button
             onClick={onClose}
-            className="absolute top-4 right-4 p-2 rounded-full bg-white/5 hover:bg-white/10 text-slate-400 hover:text-white transition"
+            className="absolute top-4 right-4 p-2 rounded-full bg-white/5 hover:bg-white/10 text-slate-400 hover:text-white transition cursor-pointer"
           >
             <X className="w-5 h-5" />
           </button>
@@ -180,10 +171,12 @@ export const DeliveryModal: React.FC<DeliveryModalProps> = ({
                 🎁
               </div>
             </div>
-            <h3 className="text-2xl font-black text-white">Your Birthday Wish is Ready!</h3>
+            <h3 className="text-2xl font-black text-white">
+              {isBelated ? 'Your Belated Wish is Ready!' : 'Your Birthday Wish is Ready!'}
+            </h3>
             <p className="text-xs sm:text-sm text-slate-300 max-w-sm mx-auto">
               Choose how you'd like to deliver your wish to{' '}
-              <span className="text-gold-300 font-bold">{birthday.name}</span>. Everything is pre-filled for you!
+              <span className="text-gold-300 font-bold">{birthday.name}</span>. Everything is pre-formatted with bold styling, emojis & 3D card link!
             </p>
           </div>
 
@@ -192,7 +185,6 @@ export const DeliveryModal: React.FC<DeliveryModalProps> = ({
             {/* 1. WhatsApp Action */}
             <button
               onClick={handleWhatsApp}
-              disabled={isSubmitting}
               className="w-full group flex items-center justify-between p-4 rounded-2xl bg-[#25D366]/10 hover:bg-[#25D366]/20 border border-[#25D366]/40 transition-all hover:scale-[1.01] active:scale-[0.98] text-left cursor-pointer shadow-lg shadow-[#25D366]/10"
             >
               <div className="flex items-center gap-3.5">
@@ -207,7 +199,7 @@ export const DeliveryModal: React.FC<DeliveryModalProps> = ({
                     </span>
                   </div>
                   <div className="text-xs text-slate-300 mt-0.5">
-                    Pre-fills message & card to <span className="font-semibold text-slate-200">{birthday.phoneMasked || birthday.phone}</span>
+                    Pre-fills bold greeting & 3D link to <span className="font-semibold text-slate-200">{birthday.phoneMasked || birthday.phone}</span>
                   </div>
                 </div>
               </div>
@@ -217,7 +209,6 @@ export const DeliveryModal: React.FC<DeliveryModalProps> = ({
             {/* 2. SMS Action */}
             <button
               onClick={handleSms}
-              disabled={isSubmitting}
               className="w-full group flex items-center justify-between p-4 rounded-2xl bg-cyan-950/30 hover:bg-cyan-950/50 border border-cyan-500/30 transition-all hover:scale-[1.01] active:scale-[0.98] text-left cursor-pointer"
             >
               <div className="flex items-center gap-3.5">
@@ -240,7 +231,6 @@ export const DeliveryModal: React.FC<DeliveryModalProps> = ({
             {birthday.email && (
               <button
                 onClick={handleEmail}
-                disabled={isSubmitting}
                 className="w-full group flex items-center justify-between p-4 rounded-2xl bg-purple-950/30 hover:bg-purple-950/50 border border-purple-500/30 transition-all hover:scale-[1.01] active:scale-[0.98] text-left cursor-pointer"
               >
                 <div className="flex items-center gap-3.5">
@@ -263,7 +253,7 @@ export const DeliveryModal: React.FC<DeliveryModalProps> = ({
             {/* 4. Download Card Image */}
             <button
               onClick={handleDownloadCard}
-              disabled={isExporting || isSubmitting}
+              disabled={isExporting}
               className="w-full group flex items-center justify-between p-4 rounded-2xl bg-gold-500/10 hover:bg-gold-500/20 border border-gold-500/30 transition-all hover:scale-[1.01] active:scale-[0.98] text-left cursor-pointer"
             >
               <div className="flex items-center gap-3.5">
@@ -314,7 +304,7 @@ export const DeliveryModal: React.FC<DeliveryModalProps> = ({
           </div>
 
           <div className="mt-5 text-center text-[11px] text-slate-400 leading-normal">
-            💡 Selecting an option opens your device's native app with the message pre-filled. Simply review and tap Send!
+            💡 The link leads directly to your personalized 3D card experience for {birthday.name}.
           </div>
         </motion.div>
       </div>

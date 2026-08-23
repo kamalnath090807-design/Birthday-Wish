@@ -55,5 +55,5 @@ export interface QuickPrompt {
   id: string;
   label: string;
   emoji: string;
-  template: (recipient: string, sender: string) => string;
+  template: (recipient: string, sender?: string) => string;
 }

@@ -359,6 +359,38 @@ class DatabaseStore {
 
     return deleted;
   }
+
+  public async getWishById(wishId: string): Promise<{ wish: Wish; birthday: BirthdayEvent } | undefined> {
+    const mongo = await getMongoDatabase();
+    if (mongo) {
+      try {
+        const wishDoc = await mongo.collection('wishes').findOne({ id: wishId }, { projection: { _id: 0 } });
+        if (wishDoc) {
+          const wish = wishDoc as unknown as Wish;
+          const bdayDoc = await mongo.collection('birthdays').findOne({ publicToken: wish.birthdayToken }, { projection: { _id: 0 } });
+          if (bdayDoc) {
+            return {
+              wish,
+              birthday: bdayDoc as unknown as BirthdayEvent,
+            };
+          }
+        }
+      } catch (err) {
+        console.error('Mongo query error in getWishById:', err);
+      }
+    }
+
+    for (const token in this.data.wishes) {
+      const wish = this.data.wishes[token]?.find((w) => w.id === wishId);
+      if (wish) {
+        const birthday = this.data.birthdays[token];
+        if (birthday) {
+          return { wish, birthday };
+        }
+      }
+    }
+    return undefined;
+  }
 }
 
 export const db = new DatabaseStore();

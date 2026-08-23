@@ -74,10 +74,15 @@ const router = express.Router();
 
 // --- API ROUTES ---
 
-// 1. Health check endpoint (Render health check & verification)
+// 1. Health check & Ping endpoint (Render health check & Uptime keep-alive)
 router.get('/health', (_req, res) => {
   res.setHeader('Content-Type', 'application/json');
-  return res.status(200).json({ status: 'ok' });
+  return res.status(200).json({ status: 'ok', serverTime: new Date().toISOString() });
+});
+
+router.get('/ping', (_req, res) => {
+  res.setHeader('Content-Type', 'application/json');
+  return res.status(200).json({ status: 'ok', message: 'Birthday Wish Server is awake! 🎉', timestamp: Date.now() });
 });
 
 // 2. Upload Media Endpoint (Memory Base64 Data URL or Cloudinary or Local Disk)
@@ -208,6 +213,22 @@ router.post('/birthdays', async (req, res) => {
   }
 });
 
+// 4b. Sync / Restore Cached Birthday (Self-healing after Render container resets)
+router.post('/birthdays/sync', async (req, res) => {
+  try {
+    const { birthday } = req.body;
+    if (birthday && birthday.publicToken && birthday.name) {
+      const existing = await db.getBirthdayByToken(birthday.publicToken);
+      if (!existing) {
+        await db.createBirthday(birthday);
+      }
+    }
+    return res.json({ synced: true });
+  } catch (err) {
+    return res.json({ synced: false });
+  }
+});
+
 // 5. List All Birthdays (for admin directory / switcher)
 router.get('/birthdays', async (_req, res) => {
   try {
@@ -227,7 +248,7 @@ router.get('/birthdays', async (_req, res) => {
   }
 });
 
-// 6. Get Public Birthday Details
+// 6. Get Public Birthday Details (Sanitized, no stats/counts exposed to public)
 router.get('/birthdays/:token', async (req, res) => {
   try {
     const { token } = req.params;
@@ -247,7 +268,6 @@ router.get('/birthdays/:token', async (req, res) => {
       birthdayDate: birthday.birthdayDate,
       themePreference: birthday.themePreference,
       createdAt: birthday.createdAt,
-      totalWishes: birthday.stats?.totalWishes || 0,
     });
   } catch (err: any) {
     return res.status(500).json({ error: err.message || 'Failed to fetch birthday details' });
@@ -280,7 +300,7 @@ router.get('/birthdays/:token/admin', async (req, res) => {
   }
 });
 
-// 8. Submit Birthday Wish
+// 8. Submit Birthday Wish (Enforces 2-Day active window)
 router.post('/birthdays/:token/wishes', async (req, res) => {
   try {
     const { token } = req.params;
@@ -288,6 +308,33 @@ router.post('/birthdays/:token/wishes', async (req, res) => {
 
     if (!birthday) {
       return res.status(404).json({ error: 'Birthday event not found' });
+    }
+
+    // 2-Day active window enforcement (Day 0 + Day 1 only)
+    const now = new Date();
+    const msPerDay = 1000 * 60 * 60 * 24;
+    let isExpired = false;
+
+    if (birthday.birthdayDate) {
+      const parts = birthday.birthdayDate.split('-');
+      if (parts.length === 3) {
+        const bdayDate = new Date(now.getFullYear(), parseInt(parts[1], 10) - 1, parseInt(parts[2], 10), 0, 0, 0, 0);
+        const todayMidnight = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 0, 0, 0, 0);
+        const diffDays = Math.round((bdayDate.getTime() - todayMidnight.getTime()) / msPerDay);
+        if (diffDays < -1) {
+          isExpired = true;
+        }
+      }
+    } else if (birthday.createdAt) {
+      const createdDate = new Date(birthday.createdAt);
+      const elapsedDays = (now.getTime() - createdDate.getTime()) / msPerDay;
+      if (elapsedDays > 2) {
+        isExpired = true;
+      }
+    }
+
+    if (isExpired) {
+      return res.status(403).json({ error: 'The 2-day birthday celebration wishing period has ended.' });
     }
 
     const { senderName, message, imageUrl, videoUrl, theme, deliveryMethod } = req.body;
@@ -318,10 +365,21 @@ router.post('/birthdays/:token/wishes', async (req, res) => {
   }
 });
 
-// 9. Get Wishes For Birthday
+// 9. Get Wishes For Birthday (Restricted to Admin authentication for privacy)
 router.get('/birthdays/:token/wishes', async (req, res) => {
   try {
     const { token } = req.params;
+    const pin = req.query.pin as string;
+    const birthday = await db.getBirthdayByToken(token);
+
+    if (!birthday) {
+      return res.status(404).json({ error: 'Birthday event not found' });
+    }
+
+    if (!pin || birthday.adminPin !== pin) {
+      return res.status(401).json({ error: 'Unauthorized: Received wishes are private to the organizer' });
+    }
+
     const wishes = await db.getWishesByToken(token);
     return res.json(wishes);
   } catch (err: any) {
@@ -356,6 +414,30 @@ router.delete('/birthdays/:token/wishes/:wishId', async (req, res) => {
     return res.status(404).json({ error: 'Wish not found' });
   } catch (err: any) {
     return res.status(500).json({ error: err.message || 'Failed to delete wish' });
+  }
+});
+
+// 12. Get Specific Recipient Wish (Publicly viewable by the recipient with 3D card)
+router.get('/wishes/:wishId', async (req, res) => {
+  try {
+    const { wishId } = req.params;
+    const result = await db.getWishById(wishId);
+    if (!result) {
+      return res.status(404).json({ error: 'Birthday wish card not found or link has expired' });
+    }
+
+    return res.json({
+      wish: result.wish,
+      birthday: {
+        publicToken: result.birthday.publicToken,
+        name: result.birthday.name,
+        photoUrl: result.birthday.photoUrl,
+        birthdayDate: result.birthday.birthdayDate,
+        themePreference: result.birthday.themePreference,
+      },
+    });
+  } catch (err: any) {
+    return res.status(500).json({ error: err.message || 'Failed to load wish card' });
   }
 });
 

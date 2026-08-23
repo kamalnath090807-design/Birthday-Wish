@@ -1,8 +1,9 @@
 import React, { useState, useEffect } from 'react';
 import { motion } from 'framer-motion';
-import { Sparkles, Calendar, Heart, ArrowDown, Gift } from 'lucide-react';
+import { Sparkles, Calendar, ArrowDown, Gift, Clock, Heart } from 'lucide-react';
 import { BirthdayEvent } from '../../types';
 import { sound } from '../../utils/audio';
+import { getBirthdayStatus, BirthdayStatus } from '../../utils/dateUtils';
 
 interface BirthdayHeroProps {
   birthday: BirthdayEvent;
@@ -10,59 +11,20 @@ interface BirthdayHeroProps {
 }
 
 export const BirthdayHero: React.FC<BirthdayHeroProps> = ({ birthday, onScrollToForm }) => {
-  const [countdown, setCountdown] = useState<{
-    isToday: boolean;
-    days: number;
-    hours: number;
-    minutes: number;
-    seconds: number;
-  }>({ isToday: false, days: 0, hours: 0, minutes: 0, seconds: 0 });
+  const [status, setStatus] = useState<BirthdayStatus>(() =>
+    getBirthdayStatus(birthday.birthdayDate)
+  );
 
   useEffect(() => {
-    if (!birthday.birthdayDate) return;
-
-    const calculateTime = () => {
-      const bdayStr = birthday.birthdayDate!;
-      const parts = bdayStr.split('-');
-      const targetMonth = parseInt(parts[1], 10) - 1;
-      const targetDay = parseInt(parts[2], 10);
-
-      const now = new Date();
-      let targetDate = new Date(now.getFullYear(), targetMonth, targetDay, 0, 0, 0);
-
-      // If already passed this year, set to next year
-      if (now.getTime() > targetDate.getTime() + 86400000) {
-        targetDate = new Date(now.getFullYear() + 1, targetMonth, targetDay, 0, 0, 0);
-      }
-
-      const diff = targetDate.getTime() - now.getTime();
-
-      // Check if today is the birthday
-      const isToday =
-        now.getMonth() === targetMonth && now.getDate() === targetDay;
-
-      if (isToday) {
-        setCountdown({ isToday: true, days: 0, hours: 0, minutes: 0, seconds: 0 });
-        return;
-      }
-
-      if (diff <= 0) {
-        setCountdown({ isToday: true, days: 0, hours: 0, minutes: 0, seconds: 0 });
-        return;
-      }
-
-      const days = Math.floor(diff / (1000 * 60 * 60 * 24));
-      const hours = Math.floor((diff / (1000 * 60 * 60)) % 24);
-      const minutes = Math.floor((diff / (1000 * 60)) % 60);
-      const seconds = Math.floor((diff / 1000) % 60);
-
-      setCountdown({ isToday: false, days, hours, minutes, seconds });
+    const update = () => {
+      setStatus(getBirthdayStatus(birthday.birthdayDate));
     };
-
-    calculateTime();
-    const interval = setInterval(calculateTime, 1000);
+    update();
+    const interval = setInterval(update, 1000);
     return () => clearInterval(interval);
   }, [birthday.birthdayDate]);
+
+  const { isToday, isBelated, isYesterday, isUpcoming, countdown, heroBadge, greetingTitle } = status;
 
   return (
     <div className="relative pt-6 pb-12 sm:pb-16 text-center px-4 overflow-hidden">
@@ -74,7 +36,7 @@ export const BirthdayHero: React.FC<BirthdayHeroProps> = ({ birthday, onScrollTo
         className="inline-flex items-center gap-2 px-4 py-1.5 rounded-full bg-white/5 border border-white/10 backdrop-blur-md text-xs sm:text-sm font-medium text-gold-300 shadow-lg shadow-gold-500/10 mb-6"
       >
         <Sparkles className="w-4 h-4 text-gold-400 animate-sparkle" />
-        <span>🎉 You're Invited to Make Their Birthday Special! 🎉</span>
+        <span>{heroBadge}</span>
       </motion.div>
 
       {/* Birthday Person Avatar */}
@@ -110,7 +72,7 @@ export const BirthdayHero: React.FC<BirthdayHeroProps> = ({ birthday, onScrollTo
       >
         <div className="text-xs sm:text-sm font-extrabold uppercase tracking-[0.25em] text-celebration-pink mb-2 flex items-center justify-center gap-2">
           <span>✨</span>
-          <span>Happy Birthday</span>
+          <span>{greetingTitle}</span>
           <span>✨</span>
         </div>
 
@@ -121,11 +83,13 @@ export const BirthdayHero: React.FC<BirthdayHeroProps> = ({ birthday, onScrollTo
         </h1>
 
         <p className="max-w-md sm:max-w-lg mx-auto text-slate-300 text-sm sm:text-base leading-relaxed mb-6 font-normal">
-          Let's make this birthday unforgettable. Write a personalized wish, attach a memory photo/video, generate a custom greeting card, and send it directly! ❤️
+          {isBelated
+            ? `It's never too late to make someone smile! Send your heartfelt belated birthday wishes, attach a photo memory, and deliver a personalized 3D card directly to WhatsApp, SMS, or Email! 💖`
+            : `Let's make this birthday unforgettable. Write a personalized wish, attach a memory photo/video, generate a custom greeting card, and send it directly! ❤️`}
         </p>
       </motion.div>
 
-      {/* Countdown or Celebration Badge */}
+      {/* Dynamic Celebration / Countdown Banner */}
       {birthday.birthdayDate && (
         <motion.div
           initial={{ opacity: 0, scale: 0.9 }}
@@ -133,7 +97,7 @@ export const BirthdayHero: React.FC<BirthdayHeroProps> = ({ birthday, onScrollTo
           transition={{ duration: 0.5, delay: 0.3 }}
           className="inline-block max-w-sm w-full mb-8"
         >
-          {countdown.isToday ? (
+          {isToday ? (
             <div className="p-4 rounded-2xl bg-gradient-to-r from-celebration-pink/20 via-gold-500/20 to-celebration-cyan/20 border border-gold-400/40 backdrop-blur-md shadow-xl shadow-gold-500/10 animate-bounce">
               <div className="text-lg font-bold text-gold-200 flex items-center justify-center gap-2">
                 <span>🥳</span>
@@ -141,6 +105,28 @@ export const BirthdayHero: React.FC<BirthdayHeroProps> = ({ birthday, onScrollTo
                 <span>🎉</span>
               </div>
               <div className="text-xs text-slate-300 mt-0.5">Let's shower them with love and blessings!</div>
+            </div>
+          ) : isYesterday ? (
+            <div className="p-4 rounded-2xl bg-gradient-to-r from-purple-950/40 via-pink-950/40 to-dark-900 border border-celebration-pink/40 backdrop-blur-md shadow-xl">
+              <div className="text-base font-bold text-pink-200 flex items-center justify-center gap-2">
+                <span>💝</span>
+                <span>Yesterday was their Birthday!</span>
+                <span>✨</span>
+              </div>
+              <div className="text-xs text-slate-300 mt-1">
+                Warm wishes are always in style — send a sweet belated greeting!
+              </div>
+            </div>
+          ) : isBelated ? (
+            <div className="p-4 rounded-2xl bg-gradient-to-r from-indigo-950/40 via-purple-950/40 to-dark-900 border border-purple-400/30 backdrop-blur-md shadow-xl">
+              <div className="text-base font-bold text-purple-200 flex items-center justify-center gap-2">
+                <span>🎁</span>
+                <span>Belated Birthday Celebration Wall</span>
+                <span>✨</span>
+              </div>
+              <div className="text-xs text-slate-300 mt-1">
+                Cherish the memories and add your blessing to the collection!
+              </div>
             </div>
           ) : (
             <div className="p-3.5 rounded-2xl bg-dark-900/80 border border-white/10 backdrop-blur-md shadow-xl">
@@ -183,7 +169,7 @@ export const BirthdayHero: React.FC<BirthdayHeroProps> = ({ birthday, onScrollTo
           className="inline-flex items-center gap-2.5 px-7 py-3.5 rounded-full font-bold text-sm sm:text-base text-white bg-gradient-to-r from-celebration-pink via-celebration-purple to-gold-500 shadow-xl shadow-celebration-pink/30 hover:shadow-celebration-pink/50 transition-all cursor-pointer"
         >
           <Gift className="w-5 h-5 text-gold-200" />
-          <span>Send Your Birthday Wish</span>
+          <span>{isBelated ? 'Send Belated Birthday Wish' : 'Send Your Birthday Wish'}</span>
           <ArrowDown className="w-4 h-4 animate-bounce" />
         </motion.button>
       </div>
