@@ -6,12 +6,15 @@
 
 **A luxury, mobile-first birthday wish platform designed for personalized celebration hubs, interactive 3D digital greeting cards, and multi-channel sharing via WhatsApp, SMS, and Email.**
 
+[![Live Demo](https://img.shields.io/badge/🌐_Live_Demo-birthday--wish--9jqz.onrender.com-ff2e93?style=for-the-badge&logo=render&logoColor=white)](https://birthday-wish-9jqz.onrender.com/)
 [![TypeScript](https://img.shields.io/badge/TypeScript-007ACC?style=for-the-badge&logo=typescript&logoColor=white)](https://www.typescriptlang.org/)
 [![React](https://img.shields.io/badge/React_19-20232A?style=for-the-badge&logo=react&logoColor=61DAFB)](https://react.dev/)
 [![Tailwind CSS](https://img.shields.io/badge/Tailwind_CSS-38B2AC?style=for-the-badge&logo=tailwind-css&logoColor=white)](https://tailwindcss.com/)
 [![Express.js](https://img.shields.io/badge/Express.js-404D59?style=for-the-badge)](https://expressjs.com/)
-[![Render](https://img.shields.io/badge/Render-46E3B7?style=for-the-badge&logo=render&logoColor=white)](https://render.com/)
+[![Render](https://img.shields.io/badge/Render-Deployed-46E3B7?style=for-the-badge&logo=render&logoColor=white)](https://birthday-wish-9jqz.onrender.com/)
 [![Tests](https://img.shields.io/badge/Tests-36%20Passed-emerald?style=for-the-badge)](./test-suite.ts)
+
+### 🔗 **Live Application URL**: [https://birthday-wish-9jqz.onrender.com/](https://birthday-wish-9jqz.onrender.com/)
 
 </div>
 
@@ -81,16 +84,17 @@ When a friend sends a wish link, the birthday person receives a link directly to
 
 ---
 
-## 🚀 Deploying on Render (Step-by-Step)
+## 🚀 Live Deployment on Render
 
-### 1. Create a New Web Service on Render:
-* Connect your GitHub repository: `https://github.com/kamalnath090807-design/Birthday-Wish`
+### Live URL: [https://birthday-wish-9jqz.onrender.com/](https://birthday-wish-9jqz.onrender.com/)
+
+### Render Configuration:
 * **Environment**: `Node`
 * **Build Command**: `npm install && npm run build`
 * **Start Command**: `npm start`
 * **Health Check Path**: `/api/health`
 
-### 2. Configure Environment Variables (Render Dashboard -> Environment):
+### Environment Variables on Render (Dashboard -> Environment):
 | Variable | Value | Description |
 | :--- | :--- | :--- |
 | `NODE_ENV` | `production` | Production mode |
@@ -98,9 +102,9 @@ When a friend sends a wish link, the birthday person receives a link directly to
 | `MONGODB_URI` | *(Optional)* | MongoDB Atlas Connection String for 100% permanent cloud storage |
 | `MONGODB_DB_NAME` | `birthday_wish` | MongoDB Database Name |
 
-### 3. Keep Render Awake 24/7 (Free Tier):
+### How to Keep Render Awake 24/7 (Free):
 1. Sign up on [cron-job.org](https://cron-job.org) or [UptimeRobot](https://uptimerobot.com).
-2. Create a monitor to ping `https://<your-render-subdomain>.onrender.com/api/ping` every **10 minutes**.
+2. Add a monitor to ping **`https://birthday-wish-9jqz.onrender.com/api/ping`** every **10 minutes**.
 3. Your Render server will now stay permanently awake with instant load times!
 
 ---
