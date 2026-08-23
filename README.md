@@ -2,7 +2,13 @@
 
 <div align="center">
 
-![Birthday Wish Platform](https://images.unsplash.com/photo-1558636508-e0db3814bd1d?w=1600&auto=format&fit=crop&q=85)
+<a href="https://birthday-wish-9jqz.onrender.com/" target="_blank" title="Click to Open Live Birthday Magic Platform">
+  <img src="./docs/hero-banner.jpg" alt="Birthday Magic Platform Live Demo" width="100%" style="border-radius: 16px; box-shadow: 0 10px 30px rgba(0,0,0,0.5);" />
+</a>
+
+<br/>
+
+### 🚀 **[👉 Click Here to Launch Live Birthday Magic Platform 👈](https://birthday-wish-9jqz.onrender.com/)**
 
 **A luxury, mobile-first birthday wish platform designed for personalized celebration hubs, interactive 3D digital greeting cards, and multi-channel sharing via WhatsApp, SMS, and Email.**
 
@@ -13,8 +19,6 @@
 [![Express.js](https://img.shields.io/badge/Express.js-404D59?style=for-the-badge)](https://expressjs.com/)
 [![Render](https://img.shields.io/badge/Render-Deployed-46E3B7?style=for-the-badge&logo=render&logoColor=white)](https://birthday-wish-9jqz.onrender.com/)
 [![Tests](https://img.shields.io/badge/Tests-36%20Passed-emerald?style=for-the-badge)](./test-suite.ts)
-
-### 🔗 **Live Application URL**: [https://birthday-wish-9jqz.onrender.com/](https://birthday-wish-9jqz.onrender.com/)
 
 </div>
 
