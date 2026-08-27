@@ -175,7 +175,18 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ token }) => {
         <div className="flex items-center gap-4 text-center md:text-left">
           <div className="relative w-20 h-20 sm:w-24 sm:h-24 rounded-full overflow-hidden border-2 border-gold-400/50 bg-dark-950 shrink-0 shadow-lg">
             {birthday.photoUrl ? (
-              <img src={birthday.photoUrl} alt={birthday.name} className="w-full h-full object-cover" />
+              <img
+                src={birthday.photoUrl}
+                alt={birthday.name}
+                className="w-full h-full object-cover"
+                onError={(e) => {
+                  e.currentTarget.style.display = 'none';
+                  const parent = e.currentTarget.parentElement;
+                  if (parent) {
+                    parent.innerHTML = '<div class="w-full h-full flex items-center justify-center text-4xl">👑</div>';
+                  }
+                }}
+              />
             ) : (
               <div className="w-full h-full flex items-center justify-center text-4xl">👑</div>
             )}

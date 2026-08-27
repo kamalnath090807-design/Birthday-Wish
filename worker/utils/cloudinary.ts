@@ -1,7 +1,35 @@
 import { Env } from '../types.js';
 
+export interface CloudinaryConfig {
+  cloudName: string;
+  apiKey: string;
+  apiSecret: string;
+}
+
 /**
- * Generate SHA-1 signature for Cloudinary authenticated API requests using Web Crypto API
+ * Validates and retrieves server-side Cloudinary configuration.
+ * Throws an explicit error if any required secret is missing.
+ */
+export function getCloudinaryConfig(env: Env): CloudinaryConfig {
+  const missing: string[] = [];
+  if (!env.CLOUDINARY_CLOUD_NAME) missing.push('CLOUDINARY_CLOUD_NAME');
+  if (!env.CLOUDINARY_API_KEY) missing.push('CLOUDINARY_API_KEY');
+  if (!env.CLOUDINARY_API_SECRET) missing.push('CLOUDINARY_API_SECRET');
+
+  if (missing.length > 0) {
+    console.warn(`[Cloudinary Config] Missing environment variable(s): ${missing.join(', ')}`);
+    throw new Error('Media storage is not configured on the server.');
+  }
+
+  return {
+    cloudName: env.CLOUDINARY_CLOUD_NAME!,
+    apiKey: env.CLOUDINARY_API_KEY!,
+    apiSecret: env.CLOUDINARY_API_SECRET!,
+  };
+}
+
+/**
+ * Generates a SHA-1 signature for Cloudinary authenticated API requests using Web Crypto API.
  */
 export async function generateCloudinarySignature(
   params: Record<string, string | number | boolean>,
@@ -21,7 +49,7 @@ export async function generateCloudinarySignature(
 }
 
 /**
- * Upload image or video to Cloudinary via server-side authenticated request
+ * Uploads an image or video file to Cloudinary via server-side signed request.
  */
 export async function uploadToCloudinary(
   file: File,
@@ -33,49 +61,37 @@ export async function uploadToCloudinary(
   asset_id: string;
   resource_type: 'image' | 'video';
 }> {
-  const cloudName = env.CLOUDINARY_CLOUD_NAME;
-  if (!cloudName) {
-    throw new Error('Cloudinary cloud name is not configured.');
-  }
+  const config = getCloudinaryConfig(env);
+
+  const timestamp = Math.floor(Date.now() / 1000);
+  const folder = 'birthday_wish';
+
+  const signature = await generateCloudinarySignature(
+    {
+      folder,
+      timestamp,
+    },
+    config.apiSecret
+  );
 
   const formData = new FormData();
   formData.append('file', file);
+  formData.append('api_key', config.apiKey);
+  formData.append('timestamp', String(timestamp));
+  formData.append('folder', folder);
+  formData.append('signature', signature);
 
-  const apiKey = env.CLOUDINARY_API_KEY;
-  const apiSecret = env.CLOUDINARY_API_SECRET;
-  const timestamp = Math.floor(Date.now() / 1000);
-
-  if (apiKey && apiSecret) {
-    // Authenticated signed upload
-    const folder = 'birthday_wish';
-    const signature = await generateCloudinarySignature(
-      {
-        folder,
-        timestamp,
-      },
-      apiSecret
-    );
-
-    formData.append('api_key', apiKey);
-    formData.append('timestamp', String(timestamp));
-    formData.append('folder', folder);
-    formData.append('signature', signature);
-  } else if (env.CLOUDINARY_UPLOAD_PRESET) {
-    // Unsigned preset upload fallback
-    formData.append('upload_preset', env.CLOUDINARY_UPLOAD_PRESET);
-  } else {
-    throw new Error('Cloudinary API credentials or upload preset must be configured.');
-  }
-
-  const uploadEndpoint = `https://api.cloudinary.com/v1_1/${cloudName}/${resourceType}/upload`;
+  const uploadEndpoint = `https://api.cloudinary.com/v1_1/${config.cloudName}/${resourceType}/upload`;
   const res = await fetch(uploadEndpoint, {
     method: 'POST',
     body: formData,
   });
 
   if (!res.ok) {
-    const errData = (await res.json().catch(() => ({}))) as any;
-    throw new Error(errData?.error?.message || `Cloudinary upload failed with status ${res.status}`);
+    const errorBody = (await res.json().catch(() => ({}))) as any;
+    console.error('[Cloudinary Upload Error]', res.status, errorBody);
+    const serverMessage = errorBody?.error?.message || `Cloudinary upload failed with status ${res.status}`;
+    throw new Error(serverMessage);
   }
 
   const data = (await res.json()) as any;
@@ -88,21 +104,20 @@ export async function uploadToCloudinary(
 }
 
 /**
- * Delete expired media asset from Cloudinary using authenticated server-side API
+ * Deletes an expired media asset from Cloudinary using authenticated signed request.
  */
 export async function deleteFromCloudinary(
   publicId: string,
   resourceType: 'image' | 'video',
   env: Env
 ): Promise<{ success: boolean; result?: string; error?: string }> {
-  const cloudName = env.CLOUDINARY_CLOUD_NAME;
-  const apiKey = env.CLOUDINARY_API_KEY;
-  const apiSecret = env.CLOUDINARY_API_SECRET;
-
-  if (!cloudName || !apiKey || !apiSecret) {
+  let config: CloudinaryConfig;
+  try {
+    config = getCloudinaryConfig(env);
+  } catch (err: any) {
     return {
       success: false,
-      error: 'Cloudinary credentials (CLOUD_NAME, API_KEY, API_SECRET) are missing for deletion.',
+      error: err.message || 'Cloudinary credentials missing for deletion',
     };
   }
 
@@ -114,17 +129,17 @@ export async function deleteFromCloudinary(
         public_id: publicId,
         timestamp,
       },
-      apiSecret
+      config.apiSecret
     );
 
     const formData = new FormData();
     formData.append('public_id', publicId);
-    formData.append('api_key', apiKey);
+    formData.append('api_key', config.apiKey);
     formData.append('timestamp', String(timestamp));
     formData.append('signature', signature);
     formData.append('invalidate', 'true');
 
-    const destroyEndpoint = `https://api.cloudinary.com/v1_1/${cloudName}/${resourceType}/destroy`;
+    const destroyEndpoint = `https://api.cloudinary.com/v1_1/${config.cloudName}/${resourceType}/destroy`;
     const res = await fetch(destroyEndpoint, {
       method: 'POST',
       body: formData,
@@ -133,16 +148,18 @@ export async function deleteFromCloudinary(
     const data = (await res.json().catch(() => ({}))) as any;
 
     // Cloudinary returns { result: 'ok' } or { result: 'not found' }
-    // If not found, it has already been deleted, so we treat it as successfully cleaned up (idempotent)
+    // If 'not found', it has already been deleted, so treat as successfully cleaned up (idempotent)
     if (res.ok && (data.result === 'ok' || data.result === 'not found')) {
       return { success: true, result: data.result };
     }
 
+    console.error('[Cloudinary Destroy Error]', res.status, data);
     return {
       success: false,
       error: data?.error?.message || data?.result || `Deletion returned status ${res.status}`,
     };
   } catch (err: any) {
+    console.error('[Cloudinary Destroy Exception]', err);
     return {
       success: false,
       error: err.message || 'Network error during Cloudinary deletion',

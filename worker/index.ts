@@ -40,9 +40,9 @@ app.post('/api/validate-phone', async (c) => {
   return c.json(result);
 });
 
-// 4. Mount Birthday & Media API routes
+// 4. Mount Birthday & Media API routes cleanly under /api (Option A)
 app.route('/api', birthdayRoutes);
-app.route('/api/upload', mediaRoutes);
+app.route('/api', mediaRoutes);
 
 // 5. Admin Cleanup Endpoint (Manual trigger / integration testing)
 app.post('/api/admin/cleanup', async (c) => {

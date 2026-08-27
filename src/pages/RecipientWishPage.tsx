@@ -38,6 +38,7 @@ export const RecipientWishPage: React.FC = () => {
   const [error, setError] = useState<string | null>(null);
   const [isThankYouOpen, setIsThankYouOpen] = useState(false);
   const [copied, setCopied] = useState(false);
+  const [imageError, setImageError] = useState(false);
   const cardRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -158,15 +159,15 @@ export const RecipientWishPage: React.FC = () => {
         </div>
       </motion.div>
 
-      {/* 2. Attached Memory Photo (if provided by sender) */}
-      {wish.imageUrl && (
+      {/* 2. Attached Photo Memory (if provided by sender) */}
+      {wish.imageUrl && !imageError && (
         <motion.div
           initial={{ opacity: 0, scale: 0.95 }}
           animate={{ opacity: 1, scale: 1 }}
-          transition={{ delay: 0.2 }}
-          className="max-w-md mx-auto"
+          transition={{ duration: 0.5, delay: 0.1 }}
+          className="max-w-xl mx-auto mb-8"
         >
-          <div className="p-4 rounded-3xl bg-dark-900/90 border border-white/15 shadow-2xl backdrop-blur-xl space-y-3 transform -rotate-1 hover:rotate-0 transition-transform duration-300">
+          <div className="bg-dark-900/80 backdrop-blur-md rounded-3xl p-4 sm:p-5 border border-white/10 shadow-2xl space-y-3">
             <div className="flex items-center justify-between text-xs text-slate-400 px-1">
               <span className="flex items-center gap-1.5 text-gold-300 font-bold">
                 <ImageIcon className="w-3.5 h-3.5" /> Memory Photo from {wish.senderName}
@@ -178,6 +179,7 @@ export const RecipientWishPage: React.FC = () => {
                 src={wish.imageUrl}
                 alt="Birthday Memory"
                 className="w-full h-full object-cover"
+                onError={() => setImageError(true)}
               />
             </div>
           </div>

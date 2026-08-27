@@ -12,6 +12,7 @@ interface WishCardProps {
 
 export const WishCard: React.FC<WishCardProps> = ({ wish, onDelete, isAdmin }) => {
   const [showImageModal, setShowImageModal] = useState(false);
+  const [imageError, setImageError] = useState(false);
   const themeConfig = CARD_THEMES[wish.theme as CardThemeId] || CARD_THEMES.gold;
 
   const formatDate = (iso: string) => {
@@ -94,9 +95,9 @@ export const WishCard: React.FC<WishCardProps> = ({ wish, onDelete, isAdmin }) =
         </div>
 
         {/* Attached Photo / Video */}
-        {(wish.imageUrl || wish.videoUrl) && (
+        {((wish.imageUrl && !imageError) || wish.videoUrl) && (
           <div className="space-y-2 pt-1">
-            {wish.imageUrl && (
+            {wish.imageUrl && !imageError && (
               <div
                 onClick={() => setShowImageModal(true)}
                 className="relative rounded-2xl overflow-hidden border border-white/10 bg-black/40 cursor-pointer group/img max-h-48"
@@ -105,6 +106,7 @@ export const WishCard: React.FC<WishCardProps> = ({ wish, onDelete, isAdmin }) =
                   src={wish.imageUrl}
                   alt={`Memory from ${wish.senderName}`}
                   className="w-full h-44 object-cover group-hover/img:scale-105 transition-transform duration-300"
+                  onError={() => setImageError(true)}
                 />
                 <div className="absolute inset-0 bg-black/40 opacity-0 group-hover/img:opacity-100 transition-opacity flex items-center justify-center text-xs font-semibold text-white gap-1.5">
                   <ImageIcon className="w-4 h-4" /> Click to enlarge

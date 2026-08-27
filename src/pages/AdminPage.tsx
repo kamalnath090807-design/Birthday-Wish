@@ -89,7 +89,18 @@ export const AdminPage: React.FC = () => {
                 <div className="flex items-center gap-3.5">
                   <div className="w-14 h-14 rounded-full overflow-hidden border-2 border-gold-400/30 bg-dark-950 shrink-0 flex items-center justify-center">
                     {b.photoUrl ? (
-                      <img src={b.photoUrl} alt={b.name} className="w-full h-full object-cover" />
+                      <img
+                        src={b.photoUrl}
+                        alt={b.name}
+                        className="w-full h-full object-cover"
+                        onError={(e) => {
+                          e.currentTarget.style.display = 'none';
+                          const parent = e.currentTarget.parentElement;
+                          if (parent) {
+                            parent.innerHTML = '<span class="text-2xl">👑</span>';
+                          }
+                        }}
+                      />
                     ) : (
                       <span className="text-2xl">👑</span>
                     )}

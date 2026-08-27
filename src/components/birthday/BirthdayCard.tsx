@@ -1,4 +1,4 @@
-import React, { forwardRef, useState } from 'react';
+import React, { forwardRef, useState, useEffect } from 'react';
 import { CardThemeId } from '../../types';
 import { CARD_THEMES, generateDefaultWish } from '../../utils/cardThemes';
 import { getBirthdayStatus } from '../../utils/dateUtils';
@@ -42,6 +42,11 @@ export const BirthdayCard = forwardRef<HTMLDivElement, BirthdayCardProps>(
         : generateDefaultWish(recipientName, senderName || 'A Friend', isBelated);
 
     const [tilt, setTilt] = useState<{ x: number; y: number }>({ x: 0, y: 0 });
+    const [imageError, setImageError] = useState<boolean>(false);
+
+    useEffect(() => {
+      setImageError(false);
+    }, [imageUrl]);
 
     const handleMouseMove = (e: React.MouseEvent<HTMLDivElement>) => {
       if (!interactive) return;
@@ -111,12 +116,13 @@ export const BirthdayCard = forwardRef<HTMLDivElement, BirthdayCardProps>(
             </h2>
 
             {/* Attached Photo Preview (if present) */}
-            {imageUrl && (
+            {imageUrl && !imageError && (
               <div className="relative w-full max-w-[280px] p-2 bg-white/10 backdrop-blur-md rounded-2xl border border-white/20 shadow-lg my-1 rotate-[-1deg] hover:rotate-0 transition-transform">
                 <img
                   src={imageUrl}
                   alt="Birthday memory"
                   className="w-full h-44 sm:h-52 object-cover rounded-xl shadow-inner"
+                  onError={() => setImageError(true)}
                 />
               </div>
             )}

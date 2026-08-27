@@ -68,7 +68,7 @@ INSERT OR IGNORE INTO birthdays (
   '+919876543210',
   '+91 98*** ***10',
   'arun.birthday@example.com',
-  'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=500&auto=format&fit=crop&q=80',
+  NULL,
   date('now', '+2 days'),
   'gold',
   datetime('now'),
@@ -76,7 +76,7 @@ INSERT OR IGNORE INTO birthdays (
   2,
   1,
   0,
-  2,
+  0,
   0
 );
 
@@ -96,7 +96,7 @@ INSERT OR IGNORE INTO wishes (
   'arun-kumar-demo',
   'Kamal',
   'Happy birthday Arun! Wishing you immense joy, great health, and tremendous success this year! Let’s celebrate soon! 🎂🎉',
-  'https://images.unsplash.com/photo-1513151233558-d860c5398176?w=600&auto=format&fit=crop&q=80',
+  NULL,
   NULL,
   'gold',
   'whatsapp',
@@ -140,7 +140,7 @@ INSERT OR IGNORE INTO wishes (
   'arun-kumar-demo',
   'Ananya',
   'Happy Birthday brother! Cheers to more late night talks and awesome adventures together! 🥳🥂',
-  'https://images.unsplash.com/photo-1530103862676-de8c9debad1d?w=600&auto=format&fit=crop&q=80',
+  NULL,
   NULL,
   'neon',
   'whatsapp',

@@ -15,7 +15,7 @@ const ALLOWED_VIDEO_MIMES = ['video/mp4', 'video/webm', 'video/quicktime'];
 const ALLOWED_MIMES = [...ALLOWED_IMAGE_MIMES, ...ALLOWED_VIDEO_MIMES];
 
 // POST /api/upload - Handle temporary media upload with 72-hour lifespan
-mediaRoutes.post('/', async (c) => {
+mediaRoutes.post('/upload', async (c) => {
   try {
     const formData = await c.req.formData().catch(() => null);
     if (!formData) {
@@ -50,16 +50,16 @@ mediaRoutes.post('/', async (c) => {
     }
 
     // Check Cloudinary configuration
-    if (!c.env.CLOUDINARY_CLOUD_NAME) {
+    if (!c.env.CLOUDINARY_CLOUD_NAME || !c.env.CLOUDINARY_API_KEY || !c.env.CLOUDINARY_API_SECRET) {
       return c.json(
         {
-          error: 'Media uploads are not currently configured. You can still send a text wish.',
+          error: 'Media storage is not configured on the server.',
         },
         503
       );
     }
 
-    // Upload to Cloudinary
+    // Upload to Cloudinary using signed upload
     const resourceType: 'image' | 'video' = isVideo ? 'video' : 'image';
     const uploadResult = await uploadToCloudinary(blob, resourceType, c.env);
 
@@ -81,18 +81,19 @@ mediaRoutes.post('/', async (c) => {
     };
 
     await d1.addTemporaryMedia(c.env.DB, tempMediaRecord).catch((err) => {
-      console.error('Failed to save temporary media record in D1:', err);
+      console.error('[Media Route] Failed to save temporary media record in D1:', err);
     });
 
     return c.json({
       url: uploadResult.secure_url,
-      assetId: uploadResult.asset_id,
+      type: resourceType,
       publicId: uploadResult.public_id,
-      resourceType,
+      assetId: uploadResult.asset_id,
       expiresAt,
     });
   } catch (err: any) {
-    console.error('Media upload handler error:', err);
-    return c.json({ error: err.message || 'Media upload failed' }, 500);
+    console.error('[Media Upload Route Error]', err);
+    const status = err.message?.includes('not configured') ? 503 : 502;
+    return c.json({ error: err.message || 'Media upload failed' }, status);
   }
 });

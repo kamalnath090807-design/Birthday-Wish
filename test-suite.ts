@@ -5,6 +5,7 @@ import { buildFormattedMessage, buildThankYouMessage } from './src/utils/share.j
 import { isValidUploadFile } from './src/utils/fileValidation.js';
 import { api } from './src/services/api.js';
 import { runMediaCleanup } from './worker/services/cleanup.js';
+import { getCloudinaryConfig } from './worker/utils/cloudinary.js';
 import { Env, TemporaryMedia } from './worker/types.js';
 
 // --- In-Memory D1 Mock for Comprehensive Edge Integration Testing ---
@@ -598,7 +599,19 @@ async function runTests() {
     const textOnlyWish = (await textOnlyWishRes.json()) as any;
     assert(!textOnlyWish.imageUrl && !textOnlyWish.videoUrl, 'Text-only wish has no media URLs');
 
-    // D. Real Photo Upload with Cloudinary -> Returns 200 with 72-Hour Expiration
+    // D. Explicit Route Verification: POST /api/upload reaches upload handler directly
+    const routeVerifyForm = new FormData();
+    routeVerifyForm.append('file', new File(['route-test-bytes'], 'route-test.jpg', { type: 'image/jpeg' }));
+    const routeVerifyRes = await app.fetch(
+      new Request(`${API_BASE}/upload`, {
+        method: 'POST',
+        body: routeVerifyForm,
+      }),
+      env
+    );
+    assert(routeVerifyRes.status === 200, 'Route POST /api/upload maps directly to upload handler (200 OK)');
+
+    // E. Real Photo Upload with Cloudinary -> Returns 200 with 72-Hour Expiration & Signed Payload
     const imgFormData = new FormData();
     const mockImage = new File(['mock-image-content-bytes'], 'birthday-photo.jpg', { type: 'image/jpeg' });
     imgFormData.append('file', mockImage);
@@ -614,19 +627,19 @@ async function runTests() {
     const uploadImgData = (await uploadImgRes.json()) as any;
     assert(uploadImgData.url.includes('cloudinary.com'), 'Upload response includes public Cloudinary URL');
     assert(uploadImgData.publicId === 'birthday_wish/photo-1', 'Upload response contains Cloudinary publicId');
-    assert(uploadImgData.resourceType === 'image', 'Upload response contains image resourceType');
+    assert(uploadImgData.type === 'image', 'Upload response contains image type');
     assert(typeof uploadImgData.expiresAt === 'string', 'Upload response includes ISO expiresAt timestamp');
 
     // Verify 72-hour expiry timestamp calculation
     const expiryDiffHours = (new Date(uploadImgData.expiresAt).getTime() - Date.now()) / (1000 * 60 * 60);
     assert(Math.round(expiryDiffHours) === 72, 'ExpiresAt is set to approximately 72 hours (3 days)');
 
-    // E. Verify record in temporary_media D1 table
+    // F. Verify record in temporary_media D1 table
     const tempMediaRecord = mockDb.temporaryMedia.find((m) => m.media_url === uploadImgData.url);
     assert(!!tempMediaRecord, 'D1 temporary_media table contains tracking record');
     assert(tempMediaRecord.cleanup_status === 'pending', 'Initial cleanup_status is pending');
 
-    // F. Link photo to a birthday
+    // G. Link photo to a birthday
     const bdayWithPhotoRes = await app.fetch(
       new Request(`${API_BASE}/birthdays`, {
         method: 'POST',
@@ -644,7 +657,7 @@ async function runTests() {
     const bdayWithPhoto = (await bdayWithPhotoRes.json()) as any;
     assert(bdayWithPhoto.photoUrl === uploadImgData.url, 'Birthday stores photo URL');
 
-    // G. Real Video Upload with Cloudinary -> Returns 200 with 72-Hour Expiration
+    // H. Real Video Upload with Cloudinary -> Returns 200 with 72-Hour Expiration
     const vidFormData = new FormData();
     const mockVideo = new File(['mock-video-content-bytes'], 'greeting-video.mp4', { type: 'video/mp4' });
     vidFormData.append('file', mockVideo);
@@ -658,7 +671,7 @@ async function runTests() {
     );
     assert(uploadVidRes.status === 200, 'Uploading video returns 200 OK');
     const uploadVidData = (await uploadVidRes.json()) as any;
-    assert(uploadVidData.resourceType === 'video', 'Video resourceType is video');
+    assert(uploadVidData.type === 'video', 'Video resourceType is video');
 
     // Link video to wish
     const wishWithVideoRes = await app.fetch(
@@ -676,12 +689,40 @@ async function runTests() {
     );
     assert(wishWithVideoRes.status === 201, 'Wish created with temporary video URL');
 
-    // H. Automated Cleanup Job: Non-expired items are NOT deleted
+    // I. Missing Cloudinary credentials returns explicit server configuration error (NOT fake generic message)
+    const unconfiguredEnv: Env = {
+      DB: mockDb as unknown as D1Database,
+    };
+    const unconfFormData = new FormData();
+    unconfFormData.append('file', new File(['file-bytes'], 'test.jpg', { type: 'image/jpeg' }));
+    const unconfRes = await app.fetch(
+      new Request(`${API_BASE}/upload`, {
+        method: 'POST',
+        body: unconfFormData,
+      }),
+      unconfiguredEnv
+    );
+    assert(unconfRes.status === 503, 'Unconfigured Cloudinary secrets return HTTP 503');
+    const unconfData = (await unconfRes.json()) as any;
+    assert(unconfData.error === 'Media storage is not configured on the server.', 'Unconfigured error explicitly explains missing server media storage');
+
+    // J. Helper getCloudinaryConfig validation tests
+    let configHelperThrows = false;
+    try {
+      getCloudinaryConfig(unconfiguredEnv);
+    } catch (e: any) {
+      if (e.message.includes('Media storage is not configured on the server')) {
+        configHelperThrows = true;
+      }
+    }
+    assert(configHelperThrows, 'getCloudinaryConfig helper validates missing credentials and throws controlled error');
+
+    // K. Automated Cleanup Job: Non-expired items are NOT deleted
     const earlyCleanup = await runMediaCleanup(env);
     assert(earlyCleanup.totalFound === 0, 'Cleanup does not delete non-expired active media (< 72h)');
     assert(earlyCleanup.deleted === 0, 'Zero active media deleted early');
 
-    // I. Automated Cleanup Job: Expired items (>= 72h) are deleted and references nullified
+    // L. Automated Cleanup Job: Expired items (>= 72h) are deleted and references nullified
     // Simulate 72 hours passing by setting expires_at to the past
     mockDb.temporaryMedia.forEach((m) => {
       m.expires_at = new Date(Date.now() - 1000 * 60 * 60).toISOString(); // Expired 1 hour ago
@@ -691,19 +732,19 @@ async function runTests() {
     assert(expiredCleanup.totalFound >= 2, 'Cleanup identifies expired media assets (>= 72h)');
     assert(expiredCleanup.deleted >= 2, 'Cleanup successfully deletes expired Cloudinary assets');
 
-    // J. Verify D1 status updated to 'deleted'
+    // M. Verify D1 status updated to 'deleted'
     const cleanedImg = mockDb.temporaryMedia.find((m) => m.media_url === uploadImgData.url);
     assert(cleanedImg.cleanup_status === 'deleted', 'temporary_media record marked cleanup_status=deleted');
     assert(cleanedImg.deleted_at !== null, 'temporary_media record has deleted_at timestamp');
 
-    // K. Verify D1 media references are nullified
+    // N. Verify D1 media references are nullified
     const updatedBday = mockDb.birthdays.find((b) => b.public_token === bdayWithPhoto.publicToken);
     assert(updatedBday.photo_url === null, 'Birthday photo_url is nullified in D1 after 72h expiration');
 
     const updatedWish = mockDb.wishes.find((w) => w.video_url === uploadVidData.url || (w.sender_name === 'Video Sender' && w.video_url === null));
     assert(updatedWish.video_url === null, 'Wish video_url is nullified in D1 after 72h expiration');
 
-    // L. Cleanup Idempotence: Running cleanup again does nothing and does not fail
+    // O. Cleanup Idempotence: Running cleanup again does nothing and does not fail
     const secondCleanup = await runMediaCleanup(env);
     assert(secondCleanup.totalFound === 0, 'Subsequent cleanup runs are idempotent (0 remaining to delete)');
     assert(secondCleanup.deleted === 0, 'No duplicate deletions attempted');

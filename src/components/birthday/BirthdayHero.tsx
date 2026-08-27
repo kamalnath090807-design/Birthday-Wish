@@ -24,7 +24,9 @@ export const BirthdayHero: React.FC<BirthdayHeroProps> = ({ birthday, onScrollTo
     return () => clearInterval(interval);
   }, [birthday.birthdayDate]);
 
-  const { isToday, isBelated, isYesterday, isUpcoming, countdown, heroBadge, greetingTitle } = status;
+  const { isToday, isBelated, isYesterday, isUpcoming, countdown, greetingTitle } = status;
+  const [imageFailed, setImageFailed] = React.useState<boolean>(false);
+  const heroBadge = isBelated ? 'Belated Celebration Hub' : 'Live Birthday Celebration';
 
   return (
     <div className="relative pt-6 pb-12 sm:pb-16 text-center px-4 overflow-hidden">
@@ -48,11 +50,12 @@ export const BirthdayHero: React.FC<BirthdayHeroProps> = ({ birthday, onScrollTo
       >
         <div className="absolute inset-0 rounded-full bg-gradient-to-tr from-celebration-pink via-gold-400 to-celebration-cyan p-1 animate-pulse-glow">
           <div className="w-full h-full rounded-full overflow-hidden bg-dark-900 border-2 border-dark-950 flex items-center justify-center">
-            {birthday.photoUrl ? (
+            {birthday.photoUrl && !imageFailed ? (
               <img
                 src={birthday.photoUrl}
                 alt={birthday.name}
                 className="w-full h-full object-cover"
+                onError={() => setImageFailed(true)}
               />
             ) : (
               <div className="text-5xl sm:text-6xl select-none">👑</div>
