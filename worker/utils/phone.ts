@@ -4,16 +4,7 @@
  * Validates 10-digit Indian mobile numbers starting with 6, 7, 8, 9
  */
 
-export interface PhoneValidationResult {
-  isValid: boolean;
-  raw: string;
-  normalized: string; // e.g. "+919876543210"
-  cleanDigits: string; // e.g. "9876543210"
-  countryCode: string; // "+91"
-  formattedDisplay: string; // e.g. "+91 98765 43210"
-  maskedDisplay: string; // e.g. "+91 98*** **210"
-  error?: string;
-}
+import { PhoneValidationResult } from '../types.js';
 
 export function validateAndNormalizeIndianPhone(input: string | undefined | null): PhoneValidationResult {
   if (!input || typeof input !== 'string' || input.trim() === '') {

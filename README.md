@@ -1,33 +1,53 @@
-# 🎂 Birthday Magic Platform
+# 🎂 Birthday Magic Platform (Cloudflare Workers Architecture)
 
 <div align="center">
 
-<a href="https://birthday-wish-9jqz.onrender.com/" target="_blank" title="Click to Open Live Birthday Magic Platform">
-  <img src="./docs/hero-banner.jpg" alt="Birthday Magic Platform Live Demo" width="100%" style="border-radius: 16px; box-shadow: 0 10px 30px rgba(0,0,0,0.5);" />
-</a>
+<img src="./docs/hero-banner.jpg" alt="Birthday Magic Platform Live Demo" width="100%" style="border-radius: 16px; box-shadow: 0 10px 30px rgba(0,0,0,0.5);" />
 
 <br/>
 
-### 🚀 **[👉 Click Here to Launch Live Birthday Magic Platform 👈](https://birthday-wish-9jqz.onrender.com/)**
-
 **A luxury, mobile-first birthday wish platform designed for personalized celebration hubs, interactive 3D digital greeting cards, and multi-channel sharing via WhatsApp, SMS, and Email.**
 
-[![Live Demo](https://img.shields.io/badge/🌐_Live_Demo-birthday--wish--9jqz.onrender.com-ff2e93?style=for-the-badge&logo=render&logoColor=white)](https://birthday-wish-9jqz.onrender.com/)
+[![Cloudflare Workers](https://img.shields.io/badge/Cloudflare-Workers_Deploy-F38020?style=for-the-badge&logo=cloudflare&logoColor=white)](https://workers.cloudflare.com/)
+[![Cloudflare D1](https://img.shields.io/badge/Cloudflare_D1-Database-F38020?style=for-the-badge&logo=sqlite&logoColor=white)](https://developers.cloudflare.com/d1/)
+[![Cloudflare R2](https://img.shields.io/badge/Cloudflare_R2-Object_Storage-F38020?style=for-the-badge&logo=cloudflare&logoColor=white)](https://developers.cloudflare.com/r2/)
 [![TypeScript](https://img.shields.io/badge/TypeScript-007ACC?style=for-the-badge&logo=typescript&logoColor=white)](https://www.typescriptlang.org/)
 [![React](https://img.shields.io/badge/React_19-20232A?style=for-the-badge&logo=react&logoColor=61DAFB)](https://react.dev/)
 [![Tailwind CSS](https://img.shields.io/badge/Tailwind_CSS-38B2AC?style=for-the-badge&logo=tailwind-css&logoColor=white)](https://tailwindcss.com/)
-[![Express.js](https://img.shields.io/badge/Express.js-404D59?style=for-the-badge)](https://expressjs.com/)
-[![Render](https://img.shields.io/badge/Render-Deployed-46E3B7?style=for-the-badge&logo=render&logoColor=white)](https://birthday-wish-9jqz.onrender.com/)
-[![Tests](https://img.shields.io/badge/Tests-36%20Passed-emerald?style=for-the-badge)](./test-suite.ts)
+[![Tests](https://img.shields.io/badge/Tests-43%20Passed-emerald?style=for-the-badge)](./test-suite.ts)
 
 </div>
 
 ---
 
-## 🌟 Key Features & Architecture
+## 🌟 Architecture Overview
+
+```
+                        [ Browser / Client ]
+                                 │
+                     https://<domain>.workers.dev
+                                 │
+                  ┌──────────────┴──────────────┐
+                  ▼                             ▼
+        /api/* & /media/*                  All Other Routes
+      [ Cloudflare Worker ]              [ Cloudflare Assets ]
+         │              │                          │
+         ▼              ▼                          ▼
+   [ Cloudflare D1 ] [ Cloudflare R2 ]       [ Vite Dist / SPA ]
+   (SQL Database)   (Media Storage)       (index.html & assets)
+```
+
+1. **Frontend**: React 19 + Vite + Tailwind CSS + Framer Motion, served with global sub-millisecond edge latency via Cloudflare Workers Static Assets with SPA fallback.
+2. **Backend API**: Cloudflare Worker running Hono edge router with native TypeScript support, handling all `/api/*` routes.
+3. **Database**: Cloudflare D1 Serverless SQL database storing birthdays, wishes, and real-time engagement analytics.
+4. **Media Storage**: Cloudflare R2 Object Storage for photos and video greetings with HTTP range request streaming for smooth playback.
+
+---
+
+## 🌟 Key Features
 
 ### 1. 🎁 Dedicated Recipient 3D Wish Experience (`/wish/:wishId`)
-When a friend sends a wish link, the birthday person receives a link directly to their **personal 3D card experience** (never redirecting them to wish forms or other pages):
+When a friend sends a wish link, the birthday person receives a link directly to their **personal 3D card experience**:
 * **Celebratory Header**: Displays celebratory atmosphere, fanfare sound, and sparkling animations.
 * **Photo Memory**: Elegant framed Polaroid memory card with subtle tilt.
 * **Video Greeting**: Custom embedded glass video player.
@@ -43,7 +63,7 @@ When a friend sends a wish link, the birthday person receives a link directly to
   * WhatsApp, SMS, and Email pre-fill `*🎂 HAPPY BIRTHDAY [NAME]! 🎂*`.
 * **Day 1 (Next Day — Tomorrow / Belated)**:
   * Automatically transforms to **"Belated Happy Birthday [Name]!"**.
-  * Magic Inspirations swap to warm belated templates (*"Belated Happy Birthday! Even though this wish is a day late, my prayers & love are always on time! 🎂✨"*).
+  * Magic Inspirations swap to warm belated templates.
   * WhatsApp, SMS, and Email pre-fill `*🎂 BELATED HAPPY BIRTHDAY [NAME]! 🎂*`.
 * **Day 2+ (Expired / Wishes Closed)**:
   * Closes the public wishing form with a respectful **"Celebration Concluded"** screen.
@@ -53,8 +73,8 @@ When a friend sends a wish link, the birthday person receives a link directly to
 ---
 
 ### 3. 💬 Robust WhatsApp & SMS Formatting Engine
-* **Emoji Sanitization (`cleanWhatsAppText`)**: Strips invisible UTF-8 variation selectors (`\uFE0F`) that cause WhatsApp Web and Windows to display broken `???` / `` symbols.
-* **Direct Official Endpoints**: Uses official direct endpoints (`https://api.whatsapp.com/send/?phone=...`) to avoid HTTP 302 character-set mangling.
+* **Emoji Sanitization (`cleanWhatsAppText`)**: Strips invisible UTF-8 variation selectors (`\uFE0F`) that cause WhatsApp Web and Windows to display broken `???` symbols.
+* **Direct Official Endpoints**: Uses official direct endpoints (`https://api.whatsapp.com/send/?phone=...`).
 * **Automatic Phone Country Code Normalization**: Automatically prefixes Indian numbers (+91) for seamless one-tap WhatsApp launches.
 * **Rich Markdown Formatting**: Bold headers (`*bold*`), quotes, and direct links to the 3D card experience.
 
@@ -64,14 +84,6 @@ When a friend sends a wish link, the birthday person receives a link directly to
 * **Zero Admin Links on Public Pages**: When visitors open `/birthday/:token` or `/wish/:wishId`, the navbar hides all links to the Admin Hub and Create Page.
 * **Private Wish Feed & Counters**: Received wishes, sender names, and total counts are strictly hidden from public pages and require the **Admin PIN** (`/api/birthdays/:token/wishes?pin=...`).
 * **Admin Dashboard (`/admin/:token`)**: Organizers can view wish counters, sender details, attached photos & videos, moderate wishes, and download QR codes.
-
----
-
-### 5. ⚡ Render Production Resilience
-* **Dual-Layer Persistence**: Browser `localStore` auto-mirroring + `/api/birthdays/sync` background synchronization so data is never lost even if free Render containers restart.
-* **Cold-Start Auto-Retry**: Built-in exponential backoff with an animated *"Waking up server on Render... ⏳"* indicator.
-* **Keep-Alive Ping Endpoint**: Dedicated `/api/ping` endpoint to keep Render active 24/7 with free ping monitors.
-* **Flexible Storage**: Zero-config file-based storage with automated MongoDB Atlas cloud fallback via `MONGODB_URI`.
 
 ---
 
@@ -88,64 +100,82 @@ When a friend sends a wish link, the birthday person receives a link directly to
 
 ---
 
-## 🚀 Live Deployment on Render
-
-### Live URL: [https://birthday-wish-9jqz.onrender.com/](https://birthday-wish-9jqz.onrender.com/)
-
-### Render Configuration:
-* **Environment**: `Node`
-* **Build Command**: `npm install && npm run build`
-* **Start Command**: `npm start`
-* **Health Check Path**: `/api/health`
-
-### Environment Variables on Render (Dashboard -> Environment):
-| Variable | Value | Description |
-| :--- | :--- | :--- |
-| `NODE_ENV` | `production` | Production mode |
-| `PORT` | `5000` *(or auto-assigned)* | Server listening port |
-| `MONGODB_URI` | *(Optional)* | MongoDB Atlas Connection String for 100% permanent cloud storage |
-| `MONGODB_DB_NAME` | `birthday_wish` | MongoDB Database Name |
-
-### How to Keep Render Awake 24/7 (Free):
-1. Sign up on [cron-job.org](https://cron-job.org) or [UptimeRobot](https://uptimerobot.com).
-2. Add a monitor to ping **`https://birthday-wish-9jqz.onrender.com/api/ping`** every **10 minutes**.
-3. Your Render server will now stay permanently awake with instant load times!
-
----
-
 ## 📡 API Endpoints
 
 | Method | Endpoint | Description | Access |
 | :--- | :--- | :--- | :--- |
 | `GET` | `/api/health` | Service health status | Public |
-| `GET` | `/api/ping` | Keep-alive heartbeat | Public |
-| `POST` | `/api/birthdays` | Create a new birthday event | Public |
+| `GET` | `/api/ping` | Edge worker heartbeat | Public |
+| `POST` | `/api/validate-phone`| Validate & normalize Indian mobile numbers | Public |
+| `POST` | `/api/birthdays` | Create a new birthday event (returns 201) | Public |
+| `POST` | `/api/birthdays/sync` | Cached birthday restore / sync | Public |
+| `GET` | `/api/birthdays` | List sanitized birthdays | Public |
 | `GET` | `/api/birthdays/:token` | Get sanitized public birthday info | Public |
 | `GET` | `/api/birthdays/:token/admin` | Get admin dashboard data (requires PIN) | Admin |
 | `POST` | `/api/birthdays/:token/wishes` | Submit wish (enforces 2-day window) | Public |
 | `GET` | `/api/birthdays/:token/wishes` | Get list of wishes (requires PIN) | Admin |
+| `POST` | `/api/birthdays/:token/track-share` | Track WhatsApp / SMS / Email share stats | Public |
+| `DELETE`| `/api/birthdays/:token/wishes/:wishId`| Delete/moderate a wish | Admin |
 | `GET` | `/api/wishes/:wishId` | Get dedicated 3D recipient wish & card | Public |
-| `DELETE`| `/api/birthdays/:token/wishes/:id`| Delete/moderate a wish | Admin |
-| `POST` | `/api/upload` | Upload memory photo or video | Public |
-| `POST` | `/api/birthdays/sync` | Self-healing background restore | Public |
+| `POST` | `/api/upload` | Upload image or video to Cloudflare R2 | Public |
+| `GET` | `/media/:key` | Stream media directly from Cloudflare R2 | Public |
 
 ---
 
-## 💻 Local Development & Testing
+## 🚀 Cloudflare Deployment Guide
+
+### Step 1: Create Cloudflare D1 Database
+```bash
+npx wrangler d1 create birthday-wish-db
+```
+Copy the output `database_id` and paste it into `wrangler.jsonc`:
+```jsonc
+"d1_databases": [
+  {
+    "binding": "DB",
+    "database_name": "birthday-wish-db",
+    "database_id": "<PASTE_YOUR_DATABASE_ID_HERE>",
+    "migrations_dir": "./migrations"
+  }
+]
+```
+
+### Step 2: Create Cloudflare R2 Bucket
+```bash
+npx wrangler r2 bucket create birthday-wish-media
+```
+
+### Step 3: Run Database Migrations
+For local development:
+```bash
+npm run db:migrate:local
+```
+For production on Cloudflare:
+```bash
+npm run db:migrate:remote
+```
+
+### Step 4: Deploy to Cloudflare Workers
+```bash
+npm run deploy
+```
+
+---
+
+## 💻 Local Development
 
 ```bash
-# 1. Clone the repository
-git clone https://github.com/kamalnath090807-design/Birthday-Wish.git
-cd Birthday-Wish
-
-# 2. Install dependencies
+# 1. Install dependencies
 npm install
 
-# 3. Start development server (Frontend + Backend concurrently)
+# 2. Apply local D1 schema
+npm run db:migrate:local
+
+# 3. Start local development (Worker + Vite frontend concurrently)
 npm run dev
 
-# 4. Run automated test suite (36 Unit & Integration Tests)
-npx tsx test-suite.ts
+# 4. Run automated test suite (43 Unit & Integration Tests)
+npm test
 
 # 5. Build production bundle
 npm run build
@@ -160,11 +190,11 @@ Our automated test suite ([`test-suite.ts`](./test-suite.ts)) verifies:
 * ✅ **2-Day Dynamic Windows**: Today (Day 0), Belated (Day 1), and Expired (Day 2+).
 * ✅ **WhatsApp & SMS Formatting**: Bold Markdown, clean emojis, and 3D card URLs.
 * ✅ **Thank You Response Flow**: Pre-filled recipient thank you generator.
-* ✅ **Express API Integration**: Health, ping, birthday creation, sync, upload, and deletion.
+* ✅ **Cloudflare Worker API Integration**: Health, ping, birthday creation (201 Created, fixing 405 error), sync, upload to R2, and deletion.
 * ✅ **Privacy Protection**: 401 Unauthorized for wish feeds without Admin PIN, 403 Forbidden for expired wishes.
 
 ---
 
 ## 📄 License
 
-This project is licensed under the MIT License — feel free to customize and make your celebrations memorable! Built with ❤️ for unforgettable celebrations.
+This project is licensed under the MIT License. Built with ❤️ for unforgettable celebrations.

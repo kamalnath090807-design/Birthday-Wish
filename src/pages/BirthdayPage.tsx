@@ -71,7 +71,7 @@ export const BirthdayPage: React.FC = () => {
               <span>Connecting to Server...</span>
             </div>
             <p className="text-xs text-slate-400">
-              Connecting to secure service (usually takes ~10-15 seconds)...
+              Connecting to secure service...
             </p>
           </div>
         ) : (

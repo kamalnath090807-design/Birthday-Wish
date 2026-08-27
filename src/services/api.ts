@@ -17,16 +17,16 @@ function notifyWakeStatus(isWaking: boolean, attempt: number = 0) {
 }
 
 /**
- * Resilient fetch with exponential backoff designed for Render cold-starts (30-50s wakeups)
+ * Resilient edge fetch with quick retry for network fluctuations
  */
-async function fetchWithRetry(url: string, options: RequestInit = {}, maxRetries: number = 3): Promise<Response> {
+async function fetchWithRetry(url: string, options: RequestInit = {}, maxRetries: number = 2): Promise<Response> {
   let attempt = 0;
-  const backoffDelays = [1500, 3000, 5000, 8000];
+  const backoffDelays = [500, 1500];
 
   while (attempt <= maxRetries) {
     try {
       const controller = new AbortController();
-      const timeoutId = setTimeout(() => controller.abort(), 20000); // 20s per attempt
+      const timeoutId = setTimeout(() => controller.abort(), 10000); // 10s timeout
 
       const response = await fetch(url, {
         ...options,
@@ -34,11 +34,10 @@ async function fetchWithRetry(url: string, options: RequestInit = {}, maxRetries
       });
       clearTimeout(timeoutId);
 
-      // Render returns 502, 503, or 504 when spinning up a sleeping container
       if ([502, 503, 504].includes(response.status) && attempt < maxRetries) {
         attempt++;
         notifyWakeStatus(true, attempt);
-        const delay = backoffDelays[attempt - 1] || 4000;
+        const delay = backoffDelays[attempt - 1] || 1000;
         await new Promise((r) => setTimeout(r, delay));
         continue;
       }
@@ -49,7 +48,7 @@ async function fetchWithRetry(url: string, options: RequestInit = {}, maxRetries
       if (attempt < maxRetries) {
         attempt++;
         notifyWakeStatus(true, attempt);
-        const delay = backoffDelays[attempt - 1] || 4000;
+        const delay = backoffDelays[attempt - 1] || 1000;
         await new Promise((r) => setTimeout(r, delay));
       } else {
         notifyWakeStatus(false, 0);
@@ -59,7 +58,7 @@ async function fetchWithRetry(url: string, options: RequestInit = {}, maxRetries
   }
 
   notifyWakeStatus(false, 0);
-  throw new Error('Server wake up timed out. Please refresh in a moment.');
+  throw new Error('Request timed out. Please refresh in a moment.');
 }
 
 export const api = {
@@ -74,11 +73,11 @@ export const api = {
     });
 
     if (!res.ok) {
-      const data = await res.json().catch(() => ({}));
+      const data = (await res.json().catch(() => ({}))) as any;
       throw new Error(data.error || 'Failed to upload media');
     }
 
-    return res.json();
+    return res.json() as Promise<{ url: string; type: 'image' | 'video' }>;
   },
 
   // 2. Create birthday event (saved to server + cached locally)
@@ -98,11 +97,11 @@ export const api = {
     });
 
     if (!res.ok) {
-      const err = await res.json().catch(() => ({}));
+      const err = (await res.json().catch(() => ({}))) as any;
       throw new Error(err.error || 'Failed to create birthday page');
     }
 
-    const created: BirthdayEvent = await res.json();
+    const created = (await res.json()) as BirthdayEvent;
     // Cache in local storage for zero-loss recovery
     localStore.saveBirthday(created);
     return created;
@@ -155,7 +154,7 @@ export const api = {
     try {
       const res = await fetchWithRetry(url);
       if (res.ok) {
-        const data = await res.json();
+        const data = (await res.json()) as BirthdayEvent & { wishes: Wish[] };
         localStore.saveBirthday(data);
         if (data.wishes) {
           localStore.mergeWishes(token, data.wishes);
@@ -277,7 +276,7 @@ export const api = {
     try {
       const res = await fetchWithRetry(`${API_BASE}/wishes/${wishId}`);
       if (res.ok) {
-        const data = await res.json();
+        const data = (await res.json()) as { wish: Wish; birthday: BirthdayEvent };
         if (data.wish && data.birthday) {
           localStore.saveWish(data.wish.birthdayToken, data.wish);
           localStore.saveBirthday(data.birthday);

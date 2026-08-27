@@ -15,10 +15,11 @@
     "noUnusedLocals": false,
     "noUnusedParameters": false,
     "noFallthroughCasesInSwitch": true,
+    "types": ["@cloudflare/workers-types"],
     "paths": {
       "@/*": ["./src/*"]
     }
   },
-  "include": ["src", "server"],
+  "include": ["src", "worker", "test-suite.ts"],
   "references": [{ "path": "./tsconfig.node.json" }]
 }
