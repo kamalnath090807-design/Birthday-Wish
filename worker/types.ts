@@ -34,6 +34,21 @@ export interface Wish {
   createdAt: string;
 }
 
+export interface TemporaryMedia {
+  id: string;
+  providerAssetId?: string;
+  providerPublicId: string;
+  resourceType: 'image' | 'video';
+  mediaUrl: string;
+  birthdayToken?: string;
+  wishId?: string;
+  expiresAt: string;
+  createdAt: string;
+  deletedAt?: string;
+  cleanupStatus: 'pending' | 'deleted' | 'failed';
+  errorMessage?: string;
+}
+
 export interface PhoneValidationResult {
   isValid: boolean;
   raw: string;

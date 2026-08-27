@@ -195,6 +195,7 @@ export const CreateBirthday: React.FC = () => {
           >
             {photoUrl ? 'Change Profile Photo' : '+ Upload Birthday Person Photo (Optional)'}
           </button>
+          <span className="text-[10.5px] text-slate-500">Photos and videos are available for approximately 3 days.</span>
         </div>
 
         {/* 2. Full Name Input */}

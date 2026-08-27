@@ -1,4 +1,4 @@
-import { BirthdayEvent, BirthdayStats, Wish } from '../types.js';
+import { BirthdayEvent, BirthdayStats, Wish, TemporaryMedia } from '../types.js';
 
 interface BirthdayRow {
   id: string;
@@ -30,6 +30,21 @@ interface WishRow {
   theme: string;
   delivery_method: string | null;
   created_at: string;
+}
+
+interface TemporaryMediaRow {
+  id: string;
+  provider_asset_id: string | null;
+  provider_public_id: string;
+  resource_type: string;
+  media_url: string;
+  birthday_token: string | null;
+  wish_id: string | null;
+  expires_at: string;
+  created_at: string;
+  deleted_at: string | null;
+  cleanup_status: string;
+  error_message: string | null;
 }
 
 function mapBirthdayRow(row: BirthdayRow): BirthdayEvent {
@@ -69,6 +84,23 @@ function mapWishRow(row: WishRow): Wish {
     theme: row.theme || 'gold',
     deliveryMethod: (row.delivery_method as Wish['deliveryMethod']) || 'whatsapp',
     createdAt: row.created_at,
+  };
+}
+
+function mapTemporaryMediaRow(row: TemporaryMediaRow): TemporaryMedia {
+  return {
+    id: row.id,
+    providerAssetId: row.provider_asset_id || undefined,
+    providerPublicId: row.provider_public_id,
+    resourceType: (row.resource_type as 'image' | 'video') || 'image',
+    mediaUrl: row.media_url,
+    birthdayToken: row.birthday_token || undefined,
+    wishId: row.wish_id || undefined,
+    expiresAt: row.expires_at,
+    createdAt: row.created_at,
+    deletedAt: row.deleted_at || undefined,
+    cleanupStatus: (row.cleanup_status as TemporaryMedia['cleanupStatus']) || 'pending',
+    errorMessage: row.error_message || undefined,
   };
 }
 
@@ -130,6 +162,15 @@ export const d1 = {
       )
       .run();
 
+    // Link temporary media to birthday token if photo_url was uploaded
+    if (event.photoUrl) {
+      await db
+        .prepare('UPDATE temporary_media SET birthday_token = ? WHERE media_url = ?')
+        .bind(event.publicToken, event.photoUrl)
+        .run()
+        .catch(() => {});
+    }
+
     return event;
   },
 
@@ -173,6 +214,22 @@ export const d1 = {
       .bind(isImage, isVideo, isWhatsapp, isSms, isEmail, token);
 
     await db.batch([insertWishStmt, updateBirthdayStmt]);
+
+    // Link temporary media to wish id
+    if (wish.imageUrl) {
+      await db
+        .prepare('UPDATE temporary_media SET wish_id = ?, birthday_token = ? WHERE media_url = ?')
+        .bind(wish.id, token, wish.imageUrl)
+        .run()
+        .catch(() => {});
+    }
+    if (wish.videoUrl) {
+      await db
+        .prepare('UPDATE temporary_media SET wish_id = ?, birthday_token = ? WHERE media_url = ?')
+        .bind(wish.id, token, wish.videoUrl)
+        .run()
+        .catch(() => {});
+    }
 
     return wish;
   },
@@ -227,5 +284,87 @@ export const d1 = {
     if (!birthday) return null;
 
     return { wish, birthday };
+  },
+
+  // --- Temporary Media 72-Hour Tracking & Automated Cleanup ---
+
+  async addTemporaryMedia(db: D1Database, media: TemporaryMedia): Promise<TemporaryMedia> {
+    await db
+      .prepare(
+        `INSERT INTO temporary_media (
+          id, provider_asset_id, provider_public_id, resource_type,
+          media_url, birthday_token, wish_id, expires_at, created_at,
+          cleanup_status
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+      )
+      .bind(
+        media.id,
+        media.providerAssetId || null,
+        media.providerPublicId,
+        media.resourceType,
+        media.mediaUrl,
+        media.birthdayToken || null,
+        media.wishId || null,
+        media.expiresAt,
+        media.createdAt,
+        media.cleanupStatus || 'pending'
+      )
+      .run();
+
+    return media;
+  },
+
+  async getExpiredMedia(db: D1Database, cutoffIso: string): Promise<TemporaryMedia[]> {
+    const { results } = await db
+      .prepare(
+        `SELECT * FROM temporary_media
+         WHERE expires_at <= ?
+           AND deleted_at IS NULL
+           AND cleanup_status != 'deleted'
+         ORDER BY expires_at ASC
+         LIMIT 50`
+      )
+      .bind(cutoffIso)
+      .all<TemporaryMediaRow>();
+
+    return (results || []).map(mapTemporaryMediaRow);
+  },
+
+  async markMediaDeleted(db: D1Database, id: string, deletedAt: string): Promise<void> {
+    await db
+      .prepare(
+        `UPDATE temporary_media
+         SET deleted_at = ?, cleanup_status = 'deleted', error_message = NULL
+         WHERE id = ?`
+      )
+      .bind(deletedAt, id)
+      .run();
+  },
+
+  async markMediaFailed(db: D1Database, id: string, error: string): Promise<void> {
+    await db
+      .prepare(
+        `UPDATE temporary_media
+         SET cleanup_status = 'failed', error_message = ?
+         WHERE id = ?`
+      )
+      .bind(error, id)
+      .run();
+  },
+
+  async clearMediaUrlReferences(db: D1Database, mediaUrl: string): Promise<void> {
+    const clearBirthdayStmt = db
+      .prepare('UPDATE birthdays SET photo_url = NULL WHERE photo_url = ?')
+      .bind(mediaUrl);
+
+    const clearWishImageStmt = db
+      .prepare('UPDATE wishes SET image_url = NULL WHERE image_url = ?')
+      .bind(mediaUrl);
+
+    const clearWishVideoStmt = db
+      .prepare('UPDATE wishes SET video_url = NULL WHERE video_url = ?')
+      .bind(mediaUrl);
+
+    await db.batch([clearBirthdayStmt, clearWishImageStmt, clearWishVideoStmt]);
   },
 };

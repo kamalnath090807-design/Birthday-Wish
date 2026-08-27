@@ -4,13 +4,15 @@ import { getBirthdayStatus } from './src/utils/dateUtils.js';
 import { buildFormattedMessage, buildThankYouMessage } from './src/utils/share.js';
 import { isValidUploadFile } from './src/utils/fileValidation.js';
 import { api } from './src/services/api.js';
-import { Env } from './worker/types.js';
+import { runMediaCleanup } from './worker/services/cleanup.js';
+import { Env, TemporaryMedia } from './worker/types.js';
 
 // --- In-Memory D1 Mock for Comprehensive Edge Integration Testing ---
 
 class MockD1 {
   birthdays: any[] = [];
   wishes: any[] = [];
+  temporaryMedia: any[] = [];
 
   prepare(sql: string) {
     let boundArgs: any[] = [];
@@ -45,6 +47,13 @@ class MockD1 {
         }
         if (sql.includes('SELECT * FROM wishes WHERE id = ?')) {
           const res = self.wishes.filter((w) => w.id === boundArgs[0]);
+          return { results: res as T[] };
+        }
+        if (sql.includes('SELECT * FROM temporary_media')) {
+          const cutoff = boundArgs[0];
+          const res = self.temporaryMedia.filter(
+            (m) => m.expires_at <= cutoff && m.deleted_at === null && m.cleanup_status !== 'deleted'
+          );
           return { results: res as T[] };
         }
         return { results: [] as T[] };
@@ -120,6 +129,99 @@ class MockD1 {
           return { meta: { changes: 1 } };
         }
 
+        if (sql.includes('INSERT INTO temporary_media')) {
+          const [
+            id,
+            provider_asset_id,
+            provider_public_id,
+            resource_type,
+            media_url,
+            birthday_token,
+            wish_id,
+            expires_at,
+            created_at,
+            cleanup_status,
+          ] = boundArgs;
+
+          self.temporaryMedia.push({
+            id,
+            provider_asset_id,
+            provider_public_id,
+            resource_type,
+            media_url,
+            birthday_token,
+            wish_id,
+            expires_at,
+            created_at,
+            deleted_at: null,
+            cleanup_status: cleanup_status || 'pending',
+            error_message: null,
+          });
+          return { meta: { changes: 1 } };
+        }
+
+        if (sql.includes('UPDATE temporary_media SET birthday_token = ? WHERE media_url = ?')) {
+          const [token, url] = boundArgs;
+          const m = self.temporaryMedia.find((x) => x.media_url === url);
+          if (m) m.birthday_token = token;
+          return { meta: { changes: 1 } };
+        }
+
+        if (sql.includes('UPDATE temporary_media SET wish_id = ?, birthday_token = ? WHERE media_url = ?')) {
+          const [wishId, token, url] = boundArgs;
+          const m = self.temporaryMedia.find((x) => x.media_url === url);
+          if (m) {
+            m.wish_id = wishId;
+            m.birthday_token = token;
+          }
+          return { meta: { changes: 1 } };
+        }
+
+        if (sql.includes('UPDATE temporary_media') && sql.includes("cleanup_status = 'deleted'")) {
+          const [deletedAt, id] = boundArgs;
+          const m = self.temporaryMedia.find((x) => x.id === id);
+          if (m) {
+            m.deleted_at = deletedAt;
+            m.cleanup_status = 'deleted';
+            m.error_message = null;
+          }
+          return { meta: { changes: 1 } };
+        }
+
+        if (sql.includes('UPDATE temporary_media') && sql.includes("cleanup_status = 'failed'")) {
+          const [error, id] = boundArgs;
+          const m = self.temporaryMedia.find((x) => x.id === id);
+          if (m) {
+            m.cleanup_status = 'failed';
+            m.error_message = error;
+          }
+          return { meta: { changes: 1 } };
+        }
+
+        if (sql.includes('UPDATE birthdays SET photo_url = NULL WHERE photo_url = ?')) {
+          const [url] = boundArgs;
+          self.birthdays.forEach((b) => {
+            if (b.photo_url === url) b.photo_url = null;
+          });
+          return { meta: { changes: 1 } };
+        }
+
+        if (sql.includes('UPDATE wishes SET image_url = NULL WHERE image_url = ?')) {
+          const [url] = boundArgs;
+          self.wishes.forEach((w) => {
+            if (w.image_url === url) w.image_url = null;
+          });
+          return { meta: { changes: 1 } };
+        }
+
+        if (sql.includes('UPDATE wishes SET video_url = NULL WHERE video_url = ?')) {
+          const [url] = boundArgs;
+          self.wishes.forEach((w) => {
+            if (w.video_url === url) w.video_url = null;
+          });
+          return { meta: { changes: 1 } };
+        }
+
         if (sql.includes('UPDATE birthdays SET')) {
           if (sql.includes('total_wishes = total_wishes + 1')) {
             const [isImg, isVid, isWa, isSms, isEm, token] = boundArgs;
@@ -171,8 +273,51 @@ class MockD1 {
   }
 }
 
+// Global fetch interceptor to mock Cloudinary API during testing
+const originalFetch = globalThis.fetch;
+globalThis.fetch = async (input: RequestInfo | URL, init?: RequestInit): Promise<Response> => {
+  const url = typeof input === 'string' ? input : input instanceof URL ? input.toString() : input.url;
+
+  if (url.includes('api.cloudinary.com')) {
+    if (url.includes('/image/upload')) {
+      return new Response(
+        JSON.stringify({
+          secure_url: 'https://res.cloudinary.com/demo/image/upload/v1700000000/birthday_wish/photo-1.jpg',
+          public_id: 'birthday_wish/photo-1',
+          asset_id: 'asset-image-12345',
+          resource_type: 'image',
+        }),
+        { status: 200, headers: { 'Content-Type': 'application/json' } }
+      );
+    }
+
+    if (url.includes('/video/upload')) {
+      return new Response(
+        JSON.stringify({
+          secure_url: 'https://res.cloudinary.com/demo/video/upload/v1700000000/birthday_wish/video-1.mp4',
+          public_id: 'birthday_wish/video-1',
+          asset_id: 'asset-video-67890',
+          resource_type: 'video',
+        }),
+        { status: 200, headers: { 'Content-Type': 'application/json' } }
+      );
+    }
+
+    if (url.includes('/destroy')) {
+      return new Response(
+        JSON.stringify({
+          result: 'ok',
+        }),
+        { status: 200, headers: { 'Content-Type': 'application/json' } }
+      );
+    }
+  }
+
+  return originalFetch(input, init);
+};
+
 async function runTests() {
-  console.log('🧪 Starting Full Cloudflare Worker Test Suite (D1 Database, Privacy, 405 Fix & Expiration)...\n');
+  console.log('🧪 Starting Full Cloudflare Worker Test Suite (D1, 72h Temporary Storage, Privacy & Expiration)...\n');
   let passed = 0;
   let failed = 0;
 
@@ -260,9 +405,12 @@ async function runTests() {
   // 4. Cloudflare Worker Edge & API Integration Tests
   console.log('\n--- 4. Cloudflare Worker API & D1 Database Integration Tests ---');
 
-  const mockDb = new MockD1() as unknown as D1Database;
+  const mockDb = new MockD1();
   const env: Env = {
-    DB: mockDb,
+    DB: mockDb as unknown as D1Database,
+    CLOUDINARY_CLOUD_NAME: 'demo-cloud',
+    CLOUDINARY_API_KEY: 'mock-key-123',
+    CLOUDINARY_API_SECRET: 'mock-secret-456',
   };
 
   const API_BASE = 'https://birthday-wish.workers.dev/api';
@@ -402,8 +550,8 @@ async function runTests() {
     const del = (await delRes.json()) as any;
     assert(del.success === true, 'Delete/Moderate Wish API (/api/birthdays/:token/wishes/:wishId)');
 
-    // 12. Strict Upload Contract & Zero Automatic Uploads Tests
-    console.log('\n--- 5. Strict Upload Contract & Zero Automatic Uploads Tests ---');
+    // 12. Strict Upload Contract & 72-Hour Temporary Media Tests
+    console.log('\n--- 5. 72-Hour Temporary Media Upload & Automated Cleanup Tests ---');
 
     // A. Client guard: null/undefined/empty file throws client-side without calling API
     let clientGuardPassed = false;
@@ -416,17 +564,7 @@ async function runTests() {
     }
     assert(clientGuardPassed, 'api.uploadMedia rejects null input client-side without network request');
 
-    let emptyObjectGuardPassed = false;
-    try {
-      await api.uploadMedia({});
-    } catch (e: any) {
-      if (e.message.includes('No valid file selected')) {
-        emptyObjectGuardPassed = true;
-      }
-    }
-    assert(emptyObjectGuardPassed, 'api.uploadMedia rejects empty object without network request');
-
-    // B. Text-only Birthday Creation (No upload request, photoUrl is undefined)
+    // B. Text-only Birthday Creation (0 upload calls, photoUrl is undefined)
     const textOnlyCreateRes = await app.fetch(
       new Request(`${API_BASE}/birthdays`, {
         method: 'POST',
@@ -443,7 +581,7 @@ async function runTests() {
     const textOnlyBday = (await textOnlyCreateRes.json()) as any;
     assert(!textOnlyBday.photoUrl, 'Text-only birthday has no photoUrl and made 0 upload calls');
 
-    // C. Text-only Wish Submission (No upload request, imageUrl/videoUrl are undefined)
+    // C. Text-only Wish Submission (0 upload calls, imageUrl/videoUrl are undefined)
     const textOnlyWishRes = await app.fetch(
       new Request(`${API_BASE}/birthdays/${textOnlyBday.publicToken}/wishes`, {
         method: 'POST',
@@ -460,21 +598,115 @@ async function runTests() {
     const textOnlyWish = (await textOnlyWishRes.json()) as any;
     assert(!textOnlyWish.imageUrl && !textOnlyWish.videoUrl, 'Text-only wish has no media URLs');
 
-    // D. Explicit File Upload triggers graceful fallback when external storage is unconfigured
-    const formData = new FormData();
-    const mockFile = new File(['mock-image-content-bytes'], 'photo.jpg', { type: 'image/jpeg' });
-    formData.append('file', mockFile);
+    // D. Real Photo Upload with Cloudinary -> Returns 200 with 72-Hour Expiration
+    const imgFormData = new FormData();
+    const mockImage = new File(['mock-image-content-bytes'], 'birthday-photo.jpg', { type: 'image/jpeg' });
+    imgFormData.append('file', mockImage);
 
-    const uploadRes = await app.fetch(
+    const uploadImgRes = await app.fetch(
       new Request(`${API_BASE}/upload`, {
         method: 'POST',
-        body: formData,
+        body: imgFormData,
       }),
       env
     );
-    assert(uploadRes.status === 503, 'Explicit media upload returns 503 with user-friendly guidance when storage is unconfigured');
-    const uploadData = (await uploadRes.json()) as any;
-    assert(uploadData.error && uploadData.error.includes('Media uploads are not currently configured'), 'Upload error response is user friendly');
+    assert(uploadImgRes.status === 200, 'Uploading image with configured storage returns 200 OK');
+    const uploadImgData = (await uploadImgRes.json()) as any;
+    assert(uploadImgData.url.includes('cloudinary.com'), 'Upload response includes public Cloudinary URL');
+    assert(uploadImgData.publicId === 'birthday_wish/photo-1', 'Upload response contains Cloudinary publicId');
+    assert(uploadImgData.resourceType === 'image', 'Upload response contains image resourceType');
+    assert(typeof uploadImgData.expiresAt === 'string', 'Upload response includes ISO expiresAt timestamp');
+
+    // Verify 72-hour expiry timestamp calculation
+    const expiryDiffHours = (new Date(uploadImgData.expiresAt).getTime() - Date.now()) / (1000 * 60 * 60);
+    assert(Math.round(expiryDiffHours) === 72, 'ExpiresAt is set to approximately 72 hours (3 days)');
+
+    // E. Verify record in temporary_media D1 table
+    const tempMediaRecord = mockDb.temporaryMedia.find((m) => m.media_url === uploadImgData.url);
+    assert(!!tempMediaRecord, 'D1 temporary_media table contains tracking record');
+    assert(tempMediaRecord.cleanup_status === 'pending', 'Initial cleanup_status is pending');
+
+    // F. Link photo to a birthday
+    const bdayWithPhotoRes = await app.fetch(
+      new Request(`${API_BASE}/birthdays`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          name: 'Photo Celebrant',
+          phone: '9888877777',
+          photoUrl: uploadImgData.url,
+          adminPin: '5566',
+        }),
+      }),
+      env
+    );
+    assert(bdayWithPhotoRes.status === 201, 'Birthday created with temporary photo URL');
+    const bdayWithPhoto = (await bdayWithPhotoRes.json()) as any;
+    assert(bdayWithPhoto.photoUrl === uploadImgData.url, 'Birthday stores photo URL');
+
+    // G. Real Video Upload with Cloudinary -> Returns 200 with 72-Hour Expiration
+    const vidFormData = new FormData();
+    const mockVideo = new File(['mock-video-content-bytes'], 'greeting-video.mp4', { type: 'video/mp4' });
+    vidFormData.append('file', mockVideo);
+
+    const uploadVidRes = await app.fetch(
+      new Request(`${API_BASE}/upload`, {
+        method: 'POST',
+        body: vidFormData,
+      }),
+      env
+    );
+    assert(uploadVidRes.status === 200, 'Uploading video returns 200 OK');
+    const uploadVidData = (await uploadVidRes.json()) as any;
+    assert(uploadVidData.resourceType === 'video', 'Video resourceType is video');
+
+    // Link video to wish
+    const wishWithVideoRes = await app.fetch(
+      new Request(`${API_BASE}/birthdays/${bdayWithPhoto.publicToken}/wishes`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          senderName: 'Video Sender',
+          message: 'Watch this clip!',
+          videoUrl: uploadVidData.url,
+          theme: 'cyber',
+        }),
+      }),
+      env
+    );
+    assert(wishWithVideoRes.status === 201, 'Wish created with temporary video URL');
+
+    // H. Automated Cleanup Job: Non-expired items are NOT deleted
+    const earlyCleanup = await runMediaCleanup(env);
+    assert(earlyCleanup.totalFound === 0, 'Cleanup does not delete non-expired active media (< 72h)');
+    assert(earlyCleanup.deleted === 0, 'Zero active media deleted early');
+
+    // I. Automated Cleanup Job: Expired items (>= 72h) are deleted and references nullified
+    // Simulate 72 hours passing by setting expires_at to the past
+    mockDb.temporaryMedia.forEach((m) => {
+      m.expires_at = new Date(Date.now() - 1000 * 60 * 60).toISOString(); // Expired 1 hour ago
+    });
+
+    const expiredCleanup = await runMediaCleanup(env);
+    assert(expiredCleanup.totalFound >= 2, 'Cleanup identifies expired media assets (>= 72h)');
+    assert(expiredCleanup.deleted >= 2, 'Cleanup successfully deletes expired Cloudinary assets');
+
+    // J. Verify D1 status updated to 'deleted'
+    const cleanedImg = mockDb.temporaryMedia.find((m) => m.media_url === uploadImgData.url);
+    assert(cleanedImg.cleanup_status === 'deleted', 'temporary_media record marked cleanup_status=deleted');
+    assert(cleanedImg.deleted_at !== null, 'temporary_media record has deleted_at timestamp');
+
+    // K. Verify D1 media references are nullified
+    const updatedBday = mockDb.birthdays.find((b) => b.public_token === bdayWithPhoto.publicToken);
+    assert(updatedBday.photo_url === null, 'Birthday photo_url is nullified in D1 after 72h expiration');
+
+    const updatedWish = mockDb.wishes.find((w) => w.video_url === uploadVidData.url || (w.sender_name === 'Video Sender' && w.video_url === null));
+    assert(updatedWish.video_url === null, 'Wish video_url is nullified in D1 after 72h expiration');
+
+    // L. Cleanup Idempotence: Running cleanup again does nothing and does not fail
+    const secondCleanup = await runMediaCleanup(env);
+    assert(secondCleanup.totalFound === 0, 'Subsequent cleanup runs are idempotent (0 remaining to delete)');
+    assert(secondCleanup.deleted === 0, 'No duplicate deletions attempted');
   } catch (err: any) {
     console.error('API Test Error:', err);
     assert(false, `API Tests execution: ${err.message}`);

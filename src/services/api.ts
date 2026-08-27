@@ -63,8 +63,15 @@ async function fetchWithRetry(url: string, options: RequestInit = {}, maxRetries
 }
 
 export const api = {
-  // 1. Upload media (photo or video)
-  async uploadMedia(file: unknown): Promise<{ url: string; type: 'image' | 'video' }> {
+  // 1. Upload media (photo or video) with 72-hour temporary lifespan
+  async uploadMedia(file: unknown): Promise<{
+    url: string;
+    type?: 'image' | 'video';
+    assetId?: string;
+    publicId?: string;
+    resourceType?: 'image' | 'video';
+    expiresAt?: string;
+  }> {
     if (!isValidUploadFile(file)) {
       throw new Error('No valid file selected for upload.');
     }
@@ -82,7 +89,14 @@ export const api = {
       throw new Error(data.error || 'Failed to upload media');
     }
 
-    return res.json() as Promise<{ url: string; type: 'image' | 'video' }>;
+    return res.json() as Promise<{
+      url: string;
+      type?: 'image' | 'video';
+      assetId?: string;
+      publicId?: string;
+      resourceType?: 'image' | 'video';
+      expiresAt?: string;
+    }>;
   },
 
   // 2. Create birthday event (saved to server + cached locally)

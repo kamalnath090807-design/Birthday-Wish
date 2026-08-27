@@ -119,13 +119,16 @@ export const MediaUploader: React.FC<MediaUploaderProps> = ({
 
   return (
     <div className="space-y-3">
-      <div className="flex items-center justify-between">
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-1">
         <label className="text-xs font-semibold text-slate-300 uppercase tracking-wider flex items-center gap-1.5">
           <UploadCloud className="w-3.5 h-3.5 text-celebration-pink" />
           <span>Attach Photo or Video (Optional)</span>
         </label>
         <span className="text-[11px] text-slate-500">JPG/PNG ≤5MB, MP4 ≤25MB</span>
       </div>
+      <p className="text-[10.5px] text-slate-500">
+        Photos and videos are available for approximately 3 days.
+      </p>
 
       {/* Hidden Inputs */}
       <input
