@@ -13,7 +13,7 @@
     {
       "binding": "DB",
       "database_name": "birthday-wish-db",
-      "database_id": "xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx",
+      "database_id": "4c6a8d7f-ba48-4a10-bdd7-52959912617e",
       "migrations_dir": "./migrations"
     }
   ]
