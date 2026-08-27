@@ -10,7 +10,6 @@
 
 [![Cloudflare Workers](https://img.shields.io/badge/Cloudflare-Workers_Deploy-F38020?style=for-the-badge&logo=cloudflare&logoColor=white)](https://workers.cloudflare.com/)
 [![Cloudflare D1](https://img.shields.io/badge/Cloudflare_D1-Database-F38020?style=for-the-badge&logo=sqlite&logoColor=white)](https://developers.cloudflare.com/d1/)
-[![Cloudflare R2](https://img.shields.io/badge/Cloudflare_R2-Object_Storage-F38020?style=for-the-badge&logo=cloudflare&logoColor=white)](https://developers.cloudflare.com/r2/)
 [![TypeScript](https://img.shields.io/badge/TypeScript-007ACC?style=for-the-badge&logo=typescript&logoColor=white)](https://www.typescriptlang.org/)
 [![React](https://img.shields.io/badge/React_19-20232A?style=for-the-badge&logo=react&logoColor=61DAFB)](https://react.dev/)
 [![Tailwind CSS](https://img.shields.io/badge/Tailwind_CSS-38B2AC?style=for-the-badge&logo=tailwind-css&logoColor=white)](https://tailwindcss.com/)
@@ -29,18 +28,18 @@
                                  │
                   ┌──────────────┴──────────────┐
                   ▼                             ▼
-        /api/* & /media/*                  All Other Routes
-      [ Cloudflare Worker ]              [ Cloudflare Assets ]
-         │              │                          │
-         ▼              ▼                          ▼
-   [ Cloudflare D1 ] [ Cloudflare R2 ]       [ Vite Dist / SPA ]
-   (SQL Database)   (Media Storage)       (index.html & assets)
+               /api/*                  All Other Routes
+         [ Cloudflare Worker ]        [ Cloudflare Assets ]
+                 │                             │
+                 ▼                             ▼
+          [ Cloudflare D1 ]           [ Vite Dist / SPA ]
+          (SQL Database)             (index.html & assets)
 ```
 
 1. **Frontend**: React 19 + Vite + Tailwind CSS + Framer Motion, served with global sub-millisecond edge latency via Cloudflare Workers Static Assets with SPA fallback.
 2. **Backend API**: Cloudflare Worker running Hono edge router with native TypeScript support, handling all `/api/*` routes.
 3. **Database**: Cloudflare D1 Serverless SQL database storing birthdays, wishes, and real-time engagement analytics.
-4. **Media Storage**: Cloudflare R2 Object Storage for photos and video greetings with HTTP range request streaming for smooth playback.
+4. **100% Free Zero-Cost Tier**: Deploys without requiring a credit card or paid storage activation.
 
 ---
 
@@ -49,8 +48,6 @@
 ### 1. 🎁 Dedicated Recipient 3D Wish Experience (`/wish/:wishId`)
 When a friend sends a wish link, the birthday person receives a link directly to their **personal 3D card experience**:
 * **Celebratory Header**: Displays celebratory atmosphere, fanfare sound, and sparkling animations.
-* **Photo Memory**: Elegant framed Polaroid memory card with subtle tilt.
-* **Video Greeting**: Custom embedded glass video player.
 * **Personalized Message**: Styled with warm typography, quotation cards, and love accents.
 * **Interactive 3D Card**: Digital greeting card with real-time mouse/touch 3D perspective tilting, luxury card themes, and **"Save HD Card to Photos"** PNG export.
 * **"Say Thank You ❤️" Button**: Pre-fills an instant WhatsApp reply to thank the sender with emojis and stylized greetings!
@@ -83,7 +80,7 @@ When a friend sends a wish link, the birthday person receives a link directly to
 ### 4. 🔒 Privacy Protection & Admin Isolation
 * **Zero Admin Links on Public Pages**: When visitors open `/birthday/:token` or `/wish/:wishId`, the navbar hides all links to the Admin Hub and Create Page.
 * **Private Wish Feed & Counters**: Received wishes, sender names, and total counts are strictly hidden from public pages and require the **Admin PIN** (`/api/birthdays/:token/wishes?pin=...`).
-* **Admin Dashboard (`/admin/:token`)**: Organizers can view wish counters, sender details, attached photos & videos, moderate wishes, and download QR codes.
+* **Admin Dashboard (`/admin/:token`)**: Organizers can view wish counters, sender details, moderate wishes, and download QR codes.
 
 ---
 
@@ -117,8 +114,7 @@ When a friend sends a wish link, the birthday person receives a link directly to
 | `POST` | `/api/birthdays/:token/track-share` | Track WhatsApp / SMS / Email share stats | Public |
 | `DELETE`| `/api/birthdays/:token/wishes/:wishId`| Delete/moderate a wish | Admin |
 | `GET` | `/api/wishes/:wishId` | Get dedicated 3D recipient wish & card | Public |
-| `POST` | `/api/upload` | Upload image or video to Cloudflare R2 | Public |
-| `GET` | `/media/:key` | Stream media directly from Cloudflare R2 | Public |
+| `POST` | `/api/upload` | Media upload endpoint (optional Cloudinary integration) | Public |
 
 ---
 
@@ -140,12 +136,7 @@ Copy the output `database_id` and paste it into `wrangler.jsonc`:
 ]
 ```
 
-### Step 2: Create Cloudflare R2 Bucket
-```bash
-npx wrangler r2 bucket create birthday-wish-media
-```
-
-### Step 3: Run Database Migrations
+### Step 2: Run Database Migrations
 For local development:
 ```bash
 npm run db:migrate:local
@@ -155,7 +146,7 @@ For production on Cloudflare:
 npm run db:migrate:remote
 ```
 
-### Step 4: Deploy to Cloudflare Workers
+### Step 3: Deploy to Cloudflare Workers
 ```bash
 npm run deploy
 ```
@@ -190,7 +181,7 @@ Our automated test suite ([`test-suite.ts`](./test-suite.ts)) verifies:
 * ✅ **2-Day Dynamic Windows**: Today (Day 0), Belated (Day 1), and Expired (Day 2+).
 * ✅ **WhatsApp & SMS Formatting**: Bold Markdown, clean emojis, and 3D card URLs.
 * ✅ **Thank You Response Flow**: Pre-filled recipient thank you generator.
-* ✅ **Cloudflare Worker API Integration**: Health, ping, birthday creation (201 Created, fixing 405 error), sync, upload to R2, and deletion.
+* ✅ **Cloudflare Worker API Integration**: Health, ping, birthday creation (201 Created, fixing 405 error), sync, and deletion.
 * ✅ **Privacy Protection**: 401 Unauthorized for wish feeds without Admin PIN, 403 Forbidden for expired wishes.
 
 ---

@@ -1,10 +1,9 @@
 import { Hono } from 'hono';
-import { nanoid } from 'nanoid';
 import { Env } from '../types.js';
 
 export const mediaRoutes = new Hono<{ Bindings: Env }>();
 
-// 1. Upload media (Image or Video) to Cloudflare R2
+// 1. Upload media (Image or Video)
 mediaRoutes.post('/upload', async (c) => {
   try {
     const formData = await c.req.formData().catch(() => null);
@@ -37,88 +36,57 @@ mediaRoutes.post('/upload', async (c) => {
     }
 
     const isVideo = blob.type.startsWith('video/');
-    const origName = blob.name || 'file';
-    const extMatch = origName.lastIndexOf('.') !== -1 ? origName.slice(origName.lastIndexOf('.')) : (isVideo ? '.mp4' : '.jpg');
-    const safeKey = `${Date.now()}-${nanoid(8)}${extMatch.toLowerCase()}`;
+    const cloudName = c.env.CLOUDINARY_CLOUD_NAME;
+    const apiKey = c.env.CLOUDINARY_API_KEY;
+    const uploadPreset = c.env.CLOUDINARY_UPLOAD_PRESET || 'unsigned_birthday';
 
-    // Store in Cloudflare R2
-    if (!c.env.MEDIA) {
-      return c.json({ error: 'Media storage (R2) binding is not configured' }, 500);
+    // Optional free external storage integration (e.g. Cloudinary)
+    if (cloudName) {
+      try {
+        const cFormData = new FormData();
+        cFormData.append('file', blob);
+        cFormData.append('upload_preset', uploadPreset);
+        if (apiKey) {
+          cFormData.append('api_key', apiKey);
+        }
+
+        const cloudRes = await fetch(
+          `https://api.cloudinary.com/v1_1/${cloudName}/${isVideo ? 'video' : 'image'}/upload`,
+          {
+            method: 'POST',
+            body: cFormData,
+          }
+        );
+
+        if (cloudRes.ok) {
+          const cloudData = (await cloudRes.json()) as any;
+          return c.json({
+            url: cloudData.secure_url,
+            type: isVideo ? 'video' : 'image',
+            filename: cloudData.public_id || `upload-${Date.now()}`,
+            size: blob.size,
+            mimetype: blob.type,
+          });
+        }
+      } catch (err) {
+        console.error('Cloudinary upload error:', err);
+      }
     }
 
-    await c.env.MEDIA.put(safeKey, blob.stream(), {
-      httpMetadata: {
-        contentType: blob.type,
+    // Graceful response when external media storage is not configured
+    return c.json(
+      {
+        error: 'Media uploads are not currently configured. You can still send a text wish.',
       },
-      customMetadata: {
-        originalName: origName,
-        size: String(blob.size),
-      },
-    });
-
-    const fileUrl = `/media/${safeKey}`;
-
-    return c.json({
-      url: fileUrl,
-      type: isVideo ? 'video' : 'image',
-      filename: safeKey,
-      size: blob.size,
-      mimetype: blob.type,
-    });
+      503
+    );
   } catch (err: any) {
     console.error('Upload error:', err);
     return c.json({ error: err.message || 'File upload failed' }, 500);
   }
 });
 
-// 2. Stream Media directly from Cloudflare R2 with HTTP Range support
-mediaRoutes.get('/:key', async (c) => {
-  try {
-    const key = c.req.param('key');
-    if (!c.env.MEDIA) {
-      return c.text('Media storage not configured', 500);
-    }
-
-    const rangeHeader = c.req.header('range');
-    const object = rangeHeader
-      ? await c.env.MEDIA.get(key, { range: c.req.raw.headers })
-      : await c.env.MEDIA.get(key);
-
-    if (!object) {
-      return c.text('File not found', 404);
-    }
-
-    const headers = new Headers();
-    object.writeHttpMetadata(headers);
-    headers.set('etag', object.httpEtag);
-    headers.set('Cache-Control', 'public, max-age=31536000, immutable');
-    headers.set('Accept-Ranges', 'bytes');
-
-    if (!headers.has('Content-Type')) {
-      const isVideo = key.endsWith('.mp4') || key.endsWith('.webm') || key.endsWith('.mov');
-      headers.set('Content-Type', isVideo ? 'video/mp4' : 'image/jpeg');
-    }
-
-    if (object.range) {
-      const range = object.range as any;
-      if ('offset' in range && 'length' in range) {
-        const start = range.offset;
-        const end = range.offset + range.length - 1;
-        headers.set('Content-Range', `bytes ${start}-${end}/${object.size}`);
-        headers.set('Content-Length', String(range.length));
-      }
-      return new Response(object.body, {
-        status: 206,
-        headers,
-      });
-    }
-
-    headers.set('Content-Length', String(object.size));
-    return new Response(object.body, {
-      status: 200,
-      headers,
-    });
-  } catch (err: any) {
-    return c.text('Failed to load media', 500);
-  }
+// 2. Media fallback endpoint
+mediaRoutes.get('/:key', (c) => {
+  return c.json({ error: 'Media file not found or external storage is used.' }, 404);
 });

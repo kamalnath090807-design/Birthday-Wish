@@ -47,6 +47,9 @@ export interface PhoneValidationResult {
 
 export interface Env {
   DB: D1Database;
-  MEDIA: R2Bucket;
   ASSETS?: Fetcher;
+  CLOUDINARY_CLOUD_NAME?: string;
+  CLOUDINARY_API_KEY?: string;
+  CLOUDINARY_API_SECRET?: string;
+  CLOUDINARY_UPLOAD_PRESET?: string;
 }

@@ -4,7 +4,7 @@ import { getBirthdayStatus } from './src/utils/dateUtils.js';
 import { buildFormattedMessage, buildThankYouMessage } from './src/utils/share.js';
 import { Env } from './worker/types.js';
 
-// --- In-Memory D1 and R2 Mock for Comprehensive Edge Integration Testing ---
+// --- In-Memory D1 Mock for Comprehensive Edge Integration Testing ---
 
 class MockD1 {
   birthdays: any[] = [];
@@ -169,51 +169,8 @@ class MockD1 {
   }
 }
 
-class MockR2 {
-  storage = new Map<string, { body: Uint8Array; type: string }>();
-
-  async put(key: string, value: any, options: any) {
-    let bytes: Uint8Array;
-    if (value && typeof value.getReader === 'function') {
-      const reader = value.getReader();
-      const chunks: Uint8Array[] = [];
-      while (true) {
-        const { done, value: chunk } = await reader.read();
-        if (done) break;
-        chunks.push(chunk);
-      }
-      const totalLen = chunks.reduce((acc, c) => acc + c.length, 0);
-      bytes = new Uint8Array(totalLen);
-      let offset = 0;
-      for (const chunk of chunks) {
-        bytes.set(chunk, offset);
-        offset += chunk.length;
-      }
-    } else {
-      bytes = new Uint8Array(value || 0);
-    }
-    const type = options?.httpMetadata?.contentType || 'application/octet-stream';
-    this.storage.set(key, { body: bytes, type });
-    return { key };
-  }
-
-  async get(key: string) {
-    const item = this.storage.get(key);
-    if (!item) return null;
-    return {
-      body: item.body,
-      size: item.body.length,
-      httpEtag: '"mock-r2-etag"',
-      httpMetadata: { contentType: item.type },
-      writeHttpMetadata(headers: Headers) {
-        headers.set('Content-Type', item.type);
-      },
-    };
-  }
-}
-
 async function runTests() {
-  console.log('🧪 Starting Full Cloudflare Worker Test Suite (D1, R2, Privacy, 405 Fix & Expiration)...\n');
+  console.log('🧪 Starting Full Cloudflare Worker Test Suite (D1 Database, Privacy, 405 Fix & Expiration)...\n');
   let passed = 0;
   let failed = 0;
 
@@ -289,13 +246,11 @@ async function runTests() {
   assert(thankYouMsg.includes('Kamalnath B'), 'Thank you message signed by birthday recipient');
 
   // 3. Cloudflare Worker Edge & API Integration Tests
-  console.log('\n--- 3. Cloudflare Worker API & D1/R2 Integration Tests ---');
+  console.log('\n--- 3. Cloudflare Worker API & D1 Database Integration Tests ---');
 
   const mockDb = new MockD1() as unknown as D1Database;
-  const mockMedia = new MockR2() as unknown as R2Bucket;
   const env: Env = {
     DB: mockDb,
-    MEDIA: mockMedia,
   };
 
   const API_BASE = 'https://birthday-wish.workers.dev/api';
@@ -435,7 +390,7 @@ async function runTests() {
     const del = (await delRes.json()) as any;
     assert(del.success === true, 'Delete/Moderate Wish API (/api/birthdays/:token/wishes/:wishId)');
 
-    // 12. Media Upload & Streaming (R2)
+    // 12. Graceful Upload Handling (when external storage not configured)
     const formData = new FormData();
     const mockFile = new File(['mock-image-content-bytes'], 'photo.jpg', { type: 'image/jpeg' });
     formData.append('file', mockFile);
@@ -447,12 +402,9 @@ async function runTests() {
       }),
       env
     );
-    assert(uploadRes.status === 200, 'Upload image to R2 returns 200');
+    assert(uploadRes.status === 503, 'Upload endpoint returns 503 with user-friendly guidance when storage is unconfigured');
     const uploadData = (await uploadRes.json()) as any;
-    assert(uploadData.url && uploadData.type === 'image', 'Upload response includes /media/* public URL');
-
-    const mediaRes = await app.fetch(new Request(`https://birthday-wish.workers.dev${uploadData.url}`), env);
-    assert(mediaRes.status === 200, 'Stream media from R2 returns 200 with media content');
+    assert(uploadData.error && uploadData.error.includes('Media uploads are not currently configured'), 'Upload error response is user friendly');
   } catch (err: any) {
     console.error('API Test Error:', err);
     assert(false, `API Tests execution: ${err.message}`);
