@@ -2,6 +2,8 @@ import { app } from './worker/index.js';
 import { validateAndNormalizeIndianPhone } from './worker/utils/phone.js';
 import { getBirthdayStatus } from './src/utils/dateUtils.js';
 import { buildFormattedMessage, buildThankYouMessage } from './src/utils/share.js';
+import { isValidUploadFile } from './src/utils/fileValidation.js';
+import { api } from './src/services/api.js';
 import { Env } from './worker/types.js';
 
 // --- In-Memory D1 Mock for Comprehensive Edge Integration Testing ---
@@ -245,8 +247,18 @@ async function runTests() {
   assert(thankYouMsg.includes('*💖 THANK YOU SO MUCH, KAMAL! 💖*'), 'Thank you message contains bold recipient thank you header');
   assert(thankYouMsg.includes('Kamalnath B'), 'Thank you message signed by birthday recipient');
 
-  // 3. Cloudflare Worker Edge & API Integration Tests
-  console.log('\n--- 3. Cloudflare Worker API & D1 Database Integration Tests ---');
+  // 3. File Validation Utility Tests
+  console.log('\n--- 3. File Validation Utility Tests ---');
+  assert(!isValidUploadFile(null), 'isValidUploadFile rejects null');
+  assert(!isValidUploadFile(undefined), 'isValidUploadFile rejects undefined');
+  assert(!isValidUploadFile(''), 'isValidUploadFile rejects string');
+  assert(!isValidUploadFile({}), 'isValidUploadFile rejects plain empty object');
+  assert(!isValidUploadFile({ name: '', size: 100 }), 'isValidUploadFile rejects empty filename');
+  assert(!isValidUploadFile({ name: 'pic.jpg', size: 0 }), 'isValidUploadFile rejects 0-byte file');
+  assert(isValidUploadFile(new File(['hello'], 'greeting.txt', { type: 'text/plain' })), 'isValidUploadFile accepts genuine File object');
+
+  // 4. Cloudflare Worker Edge & API Integration Tests
+  console.log('\n--- 4. Cloudflare Worker API & D1 Database Integration Tests ---');
 
   const mockDb = new MockD1() as unknown as D1Database;
   const env: Env = {
@@ -390,20 +402,31 @@ async function runTests() {
     const del = (await delRes.json()) as any;
     assert(del.success === true, 'Delete/Moderate Wish API (/api/birthdays/:token/wishes/:wishId)');
 
-    // 12. Graceful Upload Handling & Zero Unnecessary Uploads Tests
+    // 12. Strict Upload Contract & Zero Automatic Uploads Tests
+    console.log('\n--- 5. Strict Upload Contract & Zero Automatic Uploads Tests ---');
+
     // A. Client guard: null/undefined/empty file throws client-side without calling API
     let clientGuardPassed = false;
     try {
-      // @ts-ignore
-      await (await import('./src/services/api.js')).api.uploadMedia(null);
+      await api.uploadMedia(null);
     } catch (e: any) {
-      if (e.message.includes('valid media file')) {
+      if (e.message.includes('No valid file selected')) {
         clientGuardPassed = true;
       }
     }
-    assert(clientGuardPassed, 'api.uploadMedia rejects null/empty file without network request');
+    assert(clientGuardPassed, 'api.uploadMedia rejects null input client-side without network request');
 
-    // B. Text-only Birthday Creation (No upload request, photo_url is undefined/null)
+    let emptyObjectGuardPassed = false;
+    try {
+      await api.uploadMedia({});
+    } catch (e: any) {
+      if (e.message.includes('No valid file selected')) {
+        emptyObjectGuardPassed = true;
+      }
+    }
+    assert(emptyObjectGuardPassed, 'api.uploadMedia rejects empty object without network request');
+
+    // B. Text-only Birthday Creation (No upload request, photoUrl is undefined)
     const textOnlyCreateRes = await app.fetch(
       new Request(`${API_BASE}/birthdays`, {
         method: 'POST',
@@ -418,9 +441,9 @@ async function runTests() {
     );
     assert(textOnlyCreateRes.status === 201, 'Text-only birthday creation succeeds with 201 Created');
     const textOnlyBday = (await textOnlyCreateRes.json()) as any;
-    assert(textOnlyBday.photoUrl === undefined || textOnlyBday.photoUrl === null, 'Text-only birthday has no photo_url');
+    assert(!textOnlyBday.photoUrl, 'Text-only birthday has no photoUrl and made 0 upload calls');
 
-    // C. Text-only Wish Submission (No upload request, imageUrl/videoUrl are undefined/null)
+    // C. Text-only Wish Submission (No upload request, imageUrl/videoUrl are undefined)
     const textOnlyWishRes = await app.fetch(
       new Request(`${API_BASE}/birthdays/${textOnlyBday.publicToken}/wishes`, {
         method: 'POST',

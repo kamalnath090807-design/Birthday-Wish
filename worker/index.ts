@@ -41,15 +41,19 @@ app.post('/api/validate-phone', async (c) => {
 
 // 4. Mount Birthday & Media API routes
 app.route('/api', birthdayRoutes);
-app.route('/api', mediaRoutes);
-app.route('/media', mediaRoutes);
+app.route('/api/upload', mediaRoutes);
 
-// 5. Explicit 404 for unhandled API routes (Always return JSON, never HTML)
+// 5. Media fallback endpoint
+app.get('/media/*', (c) => {
+  return c.json({ error: 'Media file not found or external storage is used.' }, 404);
+});
+
+// 6. Explicit 404 for unhandled API routes (Always return JSON, never HTML)
 app.all('/api/*', (c) => {
   return c.json({ error: 'API route not found' }, 404);
 });
 
-// 6. SPA and Static Asset Fallback (Cloudflare Workers Assets)
+// 7. SPA and Static Asset Fallback (Cloudflare Workers Assets)
 app.all('*', async (c) => {
   if (c.env.ASSETS) {
     return c.env.ASSETS.fetch(c.req.raw);

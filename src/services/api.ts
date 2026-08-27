@@ -1,5 +1,6 @@
 import { BirthdayEvent, Wish } from '../types';
 import { localStore } from './localStore';
+import { isValidUploadFile } from '../utils/fileValidation';
 
 const API_BASE = ((typeof import.meta !== 'undefined' && import.meta.env?.VITE_API_BASE_URL) || '/api').replace(/\/$/, '');
 
@@ -63,9 +64,9 @@ async function fetchWithRetry(url: string, options: RequestInit = {}, maxRetries
 
 export const api = {
   // 1. Upload media (photo or video)
-  async uploadMedia(file: File | null | undefined): Promise<{ url: string; type: 'image' | 'video' }> {
-    if (!file || typeof file !== 'object' || !(file instanceof File) || file.size === 0) {
-      throw new Error('Please select a valid media file to upload.');
+  async uploadMedia(file: unknown): Promise<{ url: string; type: 'image' | 'video' }> {
+    if (!isValidUploadFile(file)) {
+      throw new Error('No valid file selected for upload.');
     }
 
     const formData = new FormData();

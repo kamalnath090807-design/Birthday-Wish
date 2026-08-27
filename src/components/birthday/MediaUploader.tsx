@@ -1,6 +1,7 @@
 import React, { useRef, useState } from 'react';
 import { Camera, Image as ImageIcon, Video, X, Loader2, UploadCloud, AlertCircle } from 'lucide-react';
 import { api } from '../../services/api';
+import { isValidUploadFile } from '../../utils/fileValidation';
 import { useToast } from '../common/Toast';
 import { sound } from '../../utils/audio';
 
@@ -26,9 +27,15 @@ export const MediaUploader: React.FC<MediaUploaderProps> = ({
 
   const handleImageSelect = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const files = e.target.files;
-    if (!files || files.length === 0) return;
+    if (!files || files.length === 0) {
+      if (imageInputRef.current) imageInputRef.current.value = '';
+      return;
+    }
     const file = files[0];
-    if (!file || !(file instanceof File) || file.size === 0) return;
+    if (!isValidUploadFile(file)) {
+      if (imageInputRef.current) imageInputRef.current.value = '';
+      return;
+    }
 
     // Validate size: 5MB
     if (file.size > 5 * 1024 * 1024) {
@@ -54,7 +61,9 @@ export const MediaUploader: React.FC<MediaUploaderProps> = ({
       onImageUploaded(res.url);
       showToast('Photo attached successfully! ✨', 'success', 'Photo Uploaded');
     } catch (err: any) {
-      showToast(err.message || 'Failed to upload photo', 'error', 'Upload Error');
+      if (err.message && !err.message.includes('No valid file selected')) {
+        showToast(err.message || 'Failed to upload photo', 'error', 'Upload Notice');
+      }
     } finally {
       setIsUploading(false);
       setUploadType(null);
@@ -64,9 +73,15 @@ export const MediaUploader: React.FC<MediaUploaderProps> = ({
 
   const handleVideoSelect = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const files = e.target.files;
-    if (!files || files.length === 0) return;
+    if (!files || files.length === 0) {
+      if (videoInputRef.current) videoInputRef.current.value = '';
+      return;
+    }
     const file = files[0];
-    if (!file || !(file instanceof File) || file.size === 0) return;
+    if (!isValidUploadFile(file)) {
+      if (videoInputRef.current) videoInputRef.current.value = '';
+      return;
+    }
 
     // Validate size: 25MB
     if (file.size > 25 * 1024 * 1024) {
@@ -92,7 +107,9 @@ export const MediaUploader: React.FC<MediaUploaderProps> = ({
       onVideoUploaded(res.url);
       showToast('Video greeting attached successfully! 🎥', 'success', 'Video Uploaded');
     } catch (err: any) {
-      showToast(err.message || 'Failed to upload video', 'error', 'Upload Error');
+      if (err.message && !err.message.includes('No valid file selected')) {
+        showToast(err.message || 'Failed to upload video', 'error', 'Upload Notice');
+      }
     } finally {
       setIsUploading(false);
       setUploadType(null);

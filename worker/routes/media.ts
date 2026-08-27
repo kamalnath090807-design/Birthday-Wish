@@ -3,8 +3,8 @@ import { Env } from '../types.js';
 
 export const mediaRoutes = new Hono<{ Bindings: Env }>();
 
-// 1. Upload media (Image or Video)
-mediaRoutes.post('/upload', async (c) => {
+// POST /api/upload - Handle media upload (with optional Cloudinary free storage)
+mediaRoutes.post('/', async (c) => {
   try {
     const formData = await c.req.formData().catch(() => null);
     if (!formData) {
@@ -84,9 +84,4 @@ mediaRoutes.post('/upload', async (c) => {
     console.error('Upload error:', err);
     return c.json({ error: err.message || 'File upload failed' }, 500);
   }
-});
-
-// 2. Media fallback endpoint
-mediaRoutes.get('/:key', (c) => {
-  return c.json({ error: 'Media file not found or external storage is used.' }, 404);
 });

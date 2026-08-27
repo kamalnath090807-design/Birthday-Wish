@@ -16,6 +16,7 @@ import {
 } from 'lucide-react';
 import { api } from '../../services/api';
 import { validateAndNormalizeIndianPhone } from '../../utils/phone';
+import { isValidUploadFile } from '../../utils/fileValidation';
 import { CardThemeId } from '../../types';
 import { CardThemePicker } from '../birthday/CardThemePicker';
 import { useToast } from '../common/Toast';
@@ -43,12 +44,18 @@ export const CreateBirthday: React.FC = () => {
 
   const handlePhotoUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const files = e.target.files;
-    if (!files || files.length === 0) return;
+    if (!files || files.length === 0) {
+      if (fileInputRef.current) fileInputRef.current.value = '';
+      return;
+    }
     const file = files[0];
-    if (!file || !(file instanceof File) || file.size === 0) return;
+    if (!isValidUploadFile(file)) {
+      if (fileInputRef.current) fileInputRef.current.value = '';
+      return;
+    }
 
     if (file.size > 5 * 1024 * 1024) {
-      showToast('Photo must be under 5MB', 'error');
+      showToast('Photo must be under 5MB', 'error', 'File Size Limit');
       if (fileInputRef.current) fileInputRef.current.value = '';
       return;
     }
@@ -58,9 +65,11 @@ export const CreateBirthday: React.FC = () => {
       sound.playPop();
       const res = await api.uploadMedia(file);
       setPhotoUrl(res.url);
-      showToast('Profile photo added! 📸', 'success');
+      showToast('Profile photo added! 📸', 'success', 'Photo Attached');
     } catch (err: any) {
-      showToast(err.message || 'Failed to upload photo', 'error');
+      if (err.message && !err.message.includes('No valid file selected')) {
+        showToast(err.message || 'Failed to upload photo', 'error', 'Upload Notice');
+      }
     } finally {
       setIsUploadingPhoto(false);
       if (fileInputRef.current) fileInputRef.current.value = '';
