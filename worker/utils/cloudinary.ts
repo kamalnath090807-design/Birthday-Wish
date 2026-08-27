@@ -8,7 +8,7 @@ export interface CloudinaryConfig {
 
 /**
  * Validates and retrieves server-side Cloudinary configuration.
- * Throws an explicit error if any required secret is missing.
+ * Trims whitespace and strips any accidental quotes from secrets.
  */
 export function getCloudinaryConfig(env: Env): CloudinaryConfig {
   const missing: string[] = [];
@@ -21,15 +21,43 @@ export function getCloudinaryConfig(env: Env): CloudinaryConfig {
     throw new Error('Media storage is not configured on the server.');
   }
 
+  const cleanSecret = (val: string) => {
+    let s = val.trim();
+    if ((s.startsWith('"') && s.endsWith('"')) || (s.startsWith("'") && s.endsWith("'"))) {
+      s = s.slice(1, -1).trim();
+    }
+    return s;
+  };
+
+  const cloudName = cleanSecret(env.CLOUDINARY_CLOUD_NAME!);
+  const apiKey = cleanSecret(env.CLOUDINARY_API_KEY!);
+  const apiSecret = cleanSecret(env.CLOUDINARY_API_SECRET!);
+
+  if (!cloudName || !apiKey || !apiSecret) {
+    throw new Error('Media storage is not configured on the server.');
+  }
+
   return {
-    cloudName: env.CLOUDINARY_CLOUD_NAME!,
-    apiKey: env.CLOUDINARY_API_KEY!,
-    apiSecret: env.CLOUDINARY_API_SECRET!,
+    cloudName,
+    apiKey,
+    apiSecret,
   };
 }
 
 /**
- * Generates a SHA-1 signature for Cloudinary authenticated API requests using Web Crypto API.
+ * Standard Web Crypto SHA-1 digest returning lowercase hex string
+ */
+export async function sha1(message: string): Promise<string> {
+  const data = new TextEncoder().encode(message);
+  const hashBuffer = await crypto.subtle.digest('SHA-1', data);
+  return Array.from(new Uint8Array(hashBuffer))
+    .map((b) => b.toString(16).padStart(2, '0'))
+    .join('');
+}
+
+/**
+ * Generates a SHA-1 signature for Cloudinary authenticated API requests.
+ * Sorts parameters alphabetically and appends API secret directly without delimiters.
  */
 export async function generateCloudinarySignature(
   params: Record<string, string | number | boolean>,
@@ -42,10 +70,7 @@ export async function generateCloudinarySignature(
     .join('&');
 
   const toSign = `${serialized}${apiSecret}`;
-  const msgUint8 = new TextEncoder().encode(toSign);
-  const hashBuffer = await crypto.subtle.digest('SHA-1', msgUint8);
-  const hashArray = Array.from(new Uint8Array(hashBuffer));
-  return hashArray.map((b) => b.toString(16).padStart(2, '0')).join('');
+  return sha1(toSign);
 }
 
 /**
@@ -66,14 +91,24 @@ export async function uploadToCloudinary(
   const timestamp = Math.floor(Date.now() / 1000);
   const folder = 'birthday_wish';
 
-  const signature = await generateCloudinarySignature(
-    {
-      folder,
-      timestamp,
-    },
-    config.apiSecret
-  );
+  // 1. Build exact string to sign with alphabetically sorted params
+  const stringToSign = `folder=${folder}&timestamp=${timestamp}`;
 
+  // 2. Append apiSecret directly to stringToSign
+  const signature = await sha1(stringToSign + config.apiSecret);
+
+  // 3. Safe diagnostic logging without exposing secret
+  console.log({
+    cloudinaryCloudName: config.cloudName,
+    apiKeyPresent: Boolean(config.apiKey),
+    apiSecretPresent: Boolean(config.apiSecret),
+    stringToSign,
+    timestamp,
+    folder,
+    signature,
+  });
+
+  // 4. Send exact same timestamp and folder in FormData
   const formData = new FormData();
   formData.append('file', file);
   formData.append('api_key', config.apiKey);
@@ -123,14 +158,9 @@ export async function deleteFromCloudinary(
 
   try {
     const timestamp = Math.floor(Date.now() / 1000);
-    const signature = await generateCloudinarySignature(
-      {
-        invalidate: true,
-        public_id: publicId,
-        timestamp,
-      },
-      config.apiSecret
-    );
+    // Alphabetically sorted parameters: invalidate, public_id, timestamp
+    const stringToSign = `invalidate=true&public_id=${publicId}&timestamp=${timestamp}`;
+    const signature = await sha1(stringToSign + config.apiSecret);
 
     const formData = new FormData();
     formData.append('public_id', publicId);
@@ -147,8 +177,6 @@ export async function deleteFromCloudinary(
 
     const data = (await res.json().catch(() => ({}))) as any;
 
-    // Cloudinary returns { result: 'ok' } or { result: 'not found' }
-    // If 'not found', it has already been deleted, so treat as successfully cleaned up (idempotent)
     if (res.ok && (data.result === 'ok' || data.result === 'not found')) {
       return { success: true, result: data.result };
     }

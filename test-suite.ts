@@ -5,8 +5,9 @@ import { buildFormattedMessage, buildThankYouMessage } from './src/utils/share.j
 import { isValidUploadFile } from './src/utils/fileValidation.js';
 import { api } from './src/services/api.js';
 import { runMediaCleanup } from './worker/services/cleanup.js';
-import { getCloudinaryConfig } from './worker/utils/cloudinary.js';
+import { getCloudinaryConfig, sha1, generateCloudinarySignature } from './worker/utils/cloudinary.js';
 import { Env, TemporaryMedia } from './worker/types.js';
+
 
 // --- In-Memory D1 Mock for Comprehensive Edge Integration Testing ---
 
@@ -403,8 +404,30 @@ async function runTests() {
   assert(!isValidUploadFile({ name: 'pic.jpg', size: 0 }), 'isValidUploadFile rejects 0-byte file');
   assert(isValidUploadFile(new File(['hello'], 'greeting.txt', { type: 'text/plain' })), 'isValidUploadFile accepts genuine File object');
 
-  // 4. Cloudflare Worker Edge & API Integration Tests
-  console.log('\n--- 4. Cloudflare Worker API & D1 Database Integration Tests ---');
+  // 4. Cloudinary SHA-1 Signature Contract Unit Tests
+  console.log('\n--- 4. Cloudinary SHA-1 Signing Contract Tests ---');
+  const testInput = 'folder=birthday_wish&timestamp=1787820817my_secret_123';
+  const computedSha1 = await sha1(testInput);
+  assert(computedSha1 === '3db713fd45e846f67de8c7a47e1feb4c72d41fab', 'sha1 implementation produces exact deterministic Cloudinary SHA-1 digest');
+  const testParams = { folder: 'birthday_wish', timestamp: 1787820817 };
+  const computedSig = await generateCloudinarySignature(testParams, 'my_secret_123');
+  assert(computedSha1 === computedSig, 'sha1 matches generateCloudinarySignature output');
+  assert(computedSha1.length === 40, 'sha1 returns 40-character hex string');
+
+  // Verify secret cleaning (trimming whitespace and quotes)
+  const envWithDirtySecrets: Env = {
+    DB: new MockD1() as unknown as D1Database,
+    CLOUDINARY_CLOUD_NAME: '  "my_cloud"  ',
+    CLOUDINARY_API_KEY: " '123456789' ",
+    CLOUDINARY_API_SECRET: '  secret_xyz_99  ',
+  };
+  const cleanedConfig = getCloudinaryConfig(envWithDirtySecrets);
+  assert(cleanedConfig.cloudName === 'my_cloud', 'getCloudinaryConfig trims quotes and whitespace from cloudName');
+  assert(cleanedConfig.apiKey === '123456789', 'getCloudinaryConfig trims quotes and whitespace from apiKey');
+  assert(cleanedConfig.apiSecret === 'secret_xyz_99', 'getCloudinaryConfig trims quotes and whitespace from apiSecret');
+
+  // 5. Cloudflare Worker Edge & API Integration Tests
+  console.log('\n--- 5. Cloudflare Worker API & D1 Database Integration Tests ---');
 
   const mockDb = new MockD1();
   const env: Env = {
@@ -471,7 +494,7 @@ async function runTests() {
     const wishesPublicRes = await app.fetch(new Request(`${API_BASE}/birthdays/${token}/wishes`), env);
     assert(wishesPublicRes.status === 401, 'Public cannot fetch private wishes without Admin PIN (401 Unauthorized)');
 
-    // 6. Admin can fetch wish list with PIN
+    // 6. Admin can fetch wish feed with PIN
     const wishesAdminRes = await app.fetch(new Request(`${API_BASE}/birthdays/${token}/wishes?pin=9988`), env);
     assert(wishesAdminRes.status === 200, 'Admin can fetch wish feed with correct PIN');
 
@@ -552,7 +575,7 @@ async function runTests() {
     assert(del.success === true, 'Delete/Moderate Wish API (/api/birthdays/:token/wishes/:wishId)');
 
     // 12. Strict Upload Contract & 72-Hour Temporary Media Tests
-    console.log('\n--- 5. 72-Hour Temporary Media Upload & Automated Cleanup Tests ---');
+    console.log('\n--- 6. 72-Hour Temporary Media Upload & Automated Cleanup Tests ---');
 
     // A. Client guard: null/undefined/empty file throws client-side without calling API
     let clientGuardPassed = false;
