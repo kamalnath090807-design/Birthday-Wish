@@ -25,12 +25,15 @@ export const MediaUploader: React.FC<MediaUploaderProps> = ({
   const videoInputRef = useRef<HTMLInputElement>(null);
 
   const handleImageSelect = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (!file) return;
+    const files = e.target.files;
+    if (!files || files.length === 0) return;
+    const file = files[0];
+    if (!file || !(file instanceof File) || file.size === 0) return;
 
     // Validate size: 5MB
     if (file.size > 5 * 1024 * 1024) {
       showToast('Photo is too large. Please select an image under 5MB.', 'error', 'File Size Limit');
+      if (imageInputRef.current) imageInputRef.current.value = '';
       return;
     }
 
@@ -38,6 +41,7 @@ export const MediaUploader: React.FC<MediaUploaderProps> = ({
     const validTypes = ['image/jpeg', 'image/png', 'image/webp', 'image/gif'];
     if (!validTypes.includes(file.type)) {
       showToast('Please upload a JPG, PNG, or WEBP image.', 'error', 'Invalid File Type');
+      if (imageInputRef.current) imageInputRef.current.value = '';
       return;
     }
 
@@ -59,12 +63,15 @@ export const MediaUploader: React.FC<MediaUploaderProps> = ({
   };
 
   const handleVideoSelect = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (!file) return;
+    const files = e.target.files;
+    if (!files || files.length === 0) return;
+    const file = files[0];
+    if (!file || !(file instanceof File) || file.size === 0) return;
 
     // Validate size: 25MB
     if (file.size > 25 * 1024 * 1024) {
       showToast('Video is too large. Please select a clip under 25MB.', 'error', 'File Size Limit');
+      if (videoInputRef.current) videoInputRef.current.value = '';
       return;
     }
 
@@ -72,6 +79,7 @@ export const MediaUploader: React.FC<MediaUploaderProps> = ({
     const validTypes = ['video/mp4', 'video/webm', 'video/quicktime'];
     if (!validTypes.includes(file.type)) {
       showToast('Please upload an MP4 or WebM video.', 'error', 'Invalid Video Type');
+      if (videoInputRef.current) videoInputRef.current.value = '';
       return;
     }
 
@@ -107,6 +115,9 @@ export const MediaUploader: React.FC<MediaUploaderProps> = ({
         type="file"
         ref={imageInputRef}
         onChange={handleImageSelect}
+        onClick={(e) => {
+          (e.target as HTMLInputElement).value = '';
+        }}
         accept="image/jpeg,image/png,image/webp,image/gif"
         className="hidden"
       />
@@ -114,6 +125,9 @@ export const MediaUploader: React.FC<MediaUploaderProps> = ({
         type="file"
         ref={videoInputRef}
         onChange={handleVideoSelect}
+        onClick={(e) => {
+          (e.target as HTMLInputElement).value = '';
+        }}
         accept="video/mp4,video/webm,video/quicktime"
         className="hidden"
       />

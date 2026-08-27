@@ -390,7 +390,54 @@ async function runTests() {
     const del = (await delRes.json()) as any;
     assert(del.success === true, 'Delete/Moderate Wish API (/api/birthdays/:token/wishes/:wishId)');
 
-    // 12. Graceful Upload Handling (when external storage not configured)
+    // 12. Graceful Upload Handling & Zero Unnecessary Uploads Tests
+    // A. Client guard: null/undefined/empty file throws client-side without calling API
+    let clientGuardPassed = false;
+    try {
+      // @ts-ignore
+      await (await import('./src/services/api.js')).api.uploadMedia(null);
+    } catch (e: any) {
+      if (e.message.includes('valid media file')) {
+        clientGuardPassed = true;
+      }
+    }
+    assert(clientGuardPassed, 'api.uploadMedia rejects null/empty file without network request');
+
+    // B. Text-only Birthday Creation (No upload request, photo_url is undefined/null)
+    const textOnlyCreateRes = await app.fetch(
+      new Request(`${API_BASE}/birthdays`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          name: 'Text Only Celebrant',
+          phone: '9123456780',
+          adminPin: '4321',
+        }),
+      }),
+      env
+    );
+    assert(textOnlyCreateRes.status === 201, 'Text-only birthday creation succeeds with 201 Created');
+    const textOnlyBday = (await textOnlyCreateRes.json()) as any;
+    assert(textOnlyBday.photoUrl === undefined || textOnlyBday.photoUrl === null, 'Text-only birthday has no photo_url');
+
+    // C. Text-only Wish Submission (No upload request, imageUrl/videoUrl are undefined/null)
+    const textOnlyWishRes = await app.fetch(
+      new Request(`${API_BASE}/birthdays/${textOnlyBday.publicToken}/wishes`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          senderName: 'Text Friend',
+          message: 'Happy Birthday without photos! 🎉',
+          theme: 'pastel',
+        }),
+      }),
+      env
+    );
+    assert(textOnlyWishRes.status === 201, 'Text-only wish submission succeeds with 201 Created');
+    const textOnlyWish = (await textOnlyWishRes.json()) as any;
+    assert(!textOnlyWish.imageUrl && !textOnlyWish.videoUrl, 'Text-only wish has no media URLs');
+
+    // D. Explicit File Upload triggers graceful fallback when external storage is unconfigured
     const formData = new FormData();
     const mockFile = new File(['mock-image-content-bytes'], 'photo.jpg', { type: 'image/jpeg' });
     formData.append('file', mockFile);
@@ -402,7 +449,7 @@ async function runTests() {
       }),
       env
     );
-    assert(uploadRes.status === 503, 'Upload endpoint returns 503 with user-friendly guidance when storage is unconfigured');
+    assert(uploadRes.status === 503, 'Explicit media upload returns 503 with user-friendly guidance when storage is unconfigured');
     const uploadData = (await uploadRes.json()) as any;
     assert(uploadData.error && uploadData.error.includes('Media uploads are not currently configured'), 'Upload error response is user friendly');
   } catch (err: any) {

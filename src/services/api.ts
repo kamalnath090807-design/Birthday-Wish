@@ -1,7 +1,7 @@
 import { BirthdayEvent, Wish } from '../types';
 import { localStore } from './localStore';
 
-const API_BASE = (import.meta.env.VITE_API_BASE_URL || '/api').replace(/\/$/, '');
+const API_BASE = ((typeof import.meta !== 'undefined' && import.meta.env?.VITE_API_BASE_URL) || '/api').replace(/\/$/, '');
 
 // Listener system for server cold-start wake state
 type WakeStatusListener = (isWaking: boolean, attempt: number) => void;
@@ -63,7 +63,11 @@ async function fetchWithRetry(url: string, options: RequestInit = {}, maxRetries
 
 export const api = {
   // 1. Upload media (photo or video)
-  async uploadMedia(file: File): Promise<{ url: string; type: 'image' | 'video' }> {
+  async uploadMedia(file: File | null | undefined): Promise<{ url: string; type: 'image' | 'video' }> {
+    if (!file || typeof file !== 'object' || !(file instanceof File) || file.size === 0) {
+      throw new Error('Please select a valid media file to upload.');
+    }
+
     const formData = new FormData();
     formData.append('file', file);
 

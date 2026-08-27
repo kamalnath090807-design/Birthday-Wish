@@ -42,11 +42,14 @@ export const CreateBirthday: React.FC = () => {
   const phoneValidation = validateAndNormalizeIndianPhone(phone);
 
   const handlePhotoUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (!file) return;
+    const files = e.target.files;
+    if (!files || files.length === 0) return;
+    const file = files[0];
+    if (!file || !(file instanceof File) || file.size === 0) return;
 
     if (file.size > 5 * 1024 * 1024) {
       showToast('Photo must be under 5MB', 'error');
+      if (fileInputRef.current) fileInputRef.current.value = '';
       return;
     }
 
@@ -60,6 +63,7 @@ export const CreateBirthday: React.FC = () => {
       showToast(err.message || 'Failed to upload photo', 'error');
     } finally {
       setIsUploadingPhoto(false);
+      if (fileInputRef.current) fileInputRef.current.value = '';
     }
   };
 
@@ -140,6 +144,9 @@ export const CreateBirthday: React.FC = () => {
             type="file"
             ref={fileInputRef}
             onChange={handlePhotoUpload}
+            onClick={(e) => {
+              (e.target as HTMLInputElement).value = '';
+            }}
             accept="image/*"
             className="hidden"
           />
