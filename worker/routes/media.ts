@@ -50,7 +50,7 @@ mediaRoutes.post('/upload', async (c) => {
     }
 
     // Check Cloudinary configuration
-    if (!c.env.CLOUDINARY_CLOUD_NAME || !c.env.CLOUDINARY_API_KEY || !c.env.CLOUDINARY_API_SECRET) {
+    if (!c.env.CLOUDINARY_CLOUD_NAME || (!c.env.CLOUDINARY_UPLOAD_PRESET && (!c.env.CLOUDINARY_API_KEY || !c.env.CLOUDINARY_API_SECRET))) {
       return c.json(
         {
           error: 'Media storage is not configured on the server.',

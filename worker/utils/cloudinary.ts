@@ -2,8 +2,9 @@ import { Env } from '../types.js';
 
 export interface CloudinaryConfig {
   cloudName: string;
-  apiKey: string;
-  apiSecret: string;
+  apiKey?: string;
+  apiSecret?: string;
+  uploadPreset?: string;
 }
 
 /**
@@ -11,17 +12,8 @@ export interface CloudinaryConfig {
  * Trims whitespace and strips any accidental quotes from secrets.
  */
 export function getCloudinaryConfig(env: Env): CloudinaryConfig {
-  const missing: string[] = [];
-  if (!env.CLOUDINARY_CLOUD_NAME) missing.push('CLOUDINARY_CLOUD_NAME');
-  if (!env.CLOUDINARY_API_KEY) missing.push('CLOUDINARY_API_KEY');
-  if (!env.CLOUDINARY_API_SECRET) missing.push('CLOUDINARY_API_SECRET');
-
-  if (missing.length > 0) {
-    console.warn(`[Cloudinary Config] Missing environment variable(s): ${missing.join(', ')}`);
-    throw new Error('Media storage is not configured on the server.');
-  }
-
-  const cleanSecret = (val: string) => {
+  const cleanSecret = (val?: string) => {
+    if (!val) return undefined;
     let s = val.trim();
     if ((s.startsWith('"') && s.endsWith('"')) || (s.startsWith("'") && s.endsWith("'"))) {
       s = s.slice(1, -1).trim();
@@ -29,18 +21,27 @@ export function getCloudinaryConfig(env: Env): CloudinaryConfig {
     return s;
   };
 
-  const cloudName = cleanSecret(env.CLOUDINARY_CLOUD_NAME!);
-  const apiKey = cleanSecret(env.CLOUDINARY_API_KEY!);
-  const apiSecret = cleanSecret(env.CLOUDINARY_API_SECRET!);
+  const cloudName = cleanSecret(env.CLOUDINARY_CLOUD_NAME);
+  const apiKey = cleanSecret(env.CLOUDINARY_API_KEY);
+  const apiSecret = cleanSecret(env.CLOUDINARY_API_SECRET);
+  const uploadPreset = cleanSecret(env.CLOUDINARY_UPLOAD_PRESET);
 
-  if (!cloudName || !apiKey || !apiSecret) {
-    throw new Error('Media storage is not configured on the server.');
+  if (!cloudName) {
+    console.warn('[Cloudinary Config] Missing CLOUDINARY_CLOUD_NAME');
+    throw new Error('Media storage is not configured on the server (missing CLOUDINARY_CLOUD_NAME).');
+  }
+
+  // Either (apiKey + apiSecret) for signed uploads OR uploadPreset for unsigned uploads
+  if ((!apiKey || !apiSecret) && !uploadPreset) {
+    console.warn('[Cloudinary Config] Missing CLOUDINARY_API_KEY/SECRET or CLOUDINARY_UPLOAD_PRESET');
+    throw new Error('Media storage is not configured on the server (requires CLOUDINARY_API_KEY + CLOUDINARY_API_SECRET or CLOUDINARY_UPLOAD_PRESET).');
   }
 
   return {
     cloudName,
     apiKey,
     apiSecret,
+    uploadPreset,
   };
 }
 
@@ -74,7 +75,7 @@ export async function generateCloudinarySignature(
 }
 
 /**
- * Uploads an image or video file to Cloudinary via server-side signed request.
+ * Uploads an image or video file to Cloudinary via server-side signed request or upload preset.
  */
 export async function uploadToCloudinary(
   file: File,
@@ -87,34 +88,40 @@ export async function uploadToCloudinary(
   resource_type: 'image' | 'video';
 }> {
   const config = getCloudinaryConfig(env);
-
-  const timestamp = Math.floor(Date.now() / 1000);
   const folder = 'birthday_wish';
-
-  // 1. Build exact string to sign with alphabetically sorted params
-  const stringToSign = `folder=${folder}&timestamp=${timestamp}`;
-
-  // 2. Append apiSecret directly to stringToSign
-  const signature = await sha1(stringToSign + config.apiSecret);
-
-  // 3. Safe diagnostic logging without exposing secret
-  console.log({
-    cloudinaryCloudName: config.cloudName,
-    apiKeyPresent: Boolean(config.apiKey),
-    apiSecretPresent: Boolean(config.apiSecret),
-    stringToSign,
-    timestamp,
-    folder,
-    signature,
-  });
-
-  // 4. Send exact same timestamp and folder in FormData
   const formData = new FormData();
   formData.append('file', file);
-  formData.append('api_key', config.apiKey);
-  formData.append('timestamp', String(timestamp));
   formData.append('folder', folder);
-  formData.append('signature', signature);
+
+  if (config.apiKey && config.apiSecret) {
+    const timestamp = Math.floor(Date.now() / 1000);
+    // 1. Exact string to sign with alphabetically sorted params
+    const stringToSign = `folder=${folder}&timestamp=${timestamp}`;
+
+    // 2. Append apiSecret directly to stringToSign
+    const signature = await sha1(stringToSign + config.apiSecret);
+
+    // 3. Diagnostic logging without exposing secret
+    console.log('[Cloudinary Signed Upload]', {
+      cloudinaryCloudName: config.cloudName,
+      apiKeyPresent: Boolean(config.apiKey),
+      apiSecretLength: config.apiSecret.length,
+      stringToSign,
+      timestamp,
+      folder,
+      signature,
+    });
+
+    formData.append('api_key', config.apiKey);
+    formData.append('timestamp', String(timestamp));
+    formData.append('signature', signature);
+  } else if (config.uploadPreset) {
+    console.log('[Cloudinary Unsigned Upload Preset]', {
+      cloudName: config.cloudName,
+      uploadPreset: config.uploadPreset,
+    });
+    formData.append('upload_preset', config.uploadPreset);
+  }
 
   const uploadEndpoint = `https://api.cloudinary.com/v1_1/${config.cloudName}/${resourceType}/upload`;
   const res = await fetch(uploadEndpoint, {
@@ -153,6 +160,13 @@ export async function deleteFromCloudinary(
     return {
       success: false,
       error: err.message || 'Cloudinary credentials missing for deletion',
+    };
+  }
+
+  if (!config.apiKey || !config.apiSecret) {
+    return {
+      success: false,
+      error: 'CLOUDINARY_API_KEY and CLOUDINARY_API_SECRET required for automated deletion',
     };
   }
 
